@@ -1,0 +1,27 @@
+# PGMBox Suporte — .gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporários
+*.tmp
+*.bak
+
+# Node (caso use para desenvolvimento)
+node_modules/
+npm-debug.log*
+
+# Dados locais (nunca commitar dados reais)
+*.db
+*.sqlite

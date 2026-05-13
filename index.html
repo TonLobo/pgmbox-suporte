@@ -1,0 +1,2476 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PGMBox Suporte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script>
+// Mini chart engine — sem dependência externa
+const MiniChart = {
+  bar(canvas, labels, datasets) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.offsetWidth || 400;
+    const H = canvas.offsetHeight || 220;
+    canvas.width = W; canvas.height = H;
+    ctx.clearRect(0,0,W,H);
+    const pad = {top:20,right:16,bottom:44,left:32};
+    const aW = W-pad.left-pad.right, aH = H-pad.top-pad.bottom;
+    const n = labels.length, ds = datasets.length;
+    const allVals = datasets.flatMap(d=>d.data);
+    const maxV = Math.max(...allVals, 1);
+    const barW = (aW/n)*0.7/ds, gap = (aW/n)*0.3/2;
+    // Grid
+    ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1;
+    for(let i=0;i<=4;i++){
+      const y=pad.top+aH*(1-i/4);
+      ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(pad.left+aW,y);ctx.stroke();
+      ctx.fillStyle='#8b95b0';ctx.font='10px Arial';ctx.textAlign='right';
+      ctx.fillText(Math.round(maxV*i/4), pad.left-4, y+3);
+    }
+    // Bars
+    datasets.forEach((ds2,di)=>{
+      ds2.data.forEach((v,i)=>{
+        const x = pad.left + (i/n)*aW + gap + di*barW;
+        const bH = (v/maxV)*aH;
+        const y = pad.top+aH-bH;
+        ctx.fillStyle = ds2.backgroundColor||'#4f8ef7';
+        ctx.fillRect(x, y, barW-1, bH);
+      });
+    });
+    // Labels
+    ctx.fillStyle='#8b95b0'; ctx.font='10px Arial'; ctx.textAlign='center';
+    labels.forEach((l,i)=>{
+      ctx.fillText(l, pad.left+(i+0.5)*aW/n, H-8);
+    });
+  },
+  donut(canvas, labels, data, colors) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.offsetWidth || 220;
+    const H = canvas.offsetHeight || 220;
+    canvas.width = W; canvas.height = H;
+    ctx.clearRect(0,0,W,H);
+    const cx=W/2, cy=H/2, r=Math.min(W,H)/2-20, ri=r*0.55;
+    const total = data.reduce((a,b)=>a+b,0)||1;
+    let angle = -Math.PI/2;
+    data.forEach((v,i)=>{
+      const sweep = (v/total)*Math.PI*2;
+      ctx.beginPath();ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,angle,angle+sweep);
+      ctx.closePath();
+      ctx.fillStyle=colors[i]||'#888'; ctx.fill();
+      ctx.strokeStyle='#181c27'; ctx.lineWidth=2; ctx.stroke();
+      angle+=sweep;
+    });
+    // Hole
+    ctx.beginPath();ctx.arc(cx,cy,ri,0,Math.PI*2);
+    ctx.fillStyle='#181c27'; ctx.fill();
+    // Center text
+    ctx.fillStyle='#e8eaf0'; ctx.font='bold 14px Arial'; ctx.textAlign='center';
+    ctx.fillText(total, cx, cy+2);
+    ctx.fillStyle='#8b95b0'; ctx.font='10px Arial';
+    ctx.fillText('total', cx, cy+14);
+    // Legend dots
+    let lx=10, ly=H-12;
+    labels.forEach((l,i)=>{
+      ctx.fillStyle=colors[i]; ctx.fillRect(lx,ly-7,10,10);
+      ctx.fillStyle='#8b95b0'; ctx.font='9px Arial'; ctx.textAlign='left';
+      ctx.fillText(l, lx+13, ly+1);
+      lx += ctx.measureText(l).width + 28;
+    });
+  }
+};
+</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#181c27;--surface2:#1e2330;--surface3:#252a38;
+  --border:#2a3045;--border2:#333d55;
+  --text:#e8eaf0;--text2:#8b95b0;--text3:#5a6480;
+  --accent:#4f8ef7;--accent2:#3b7ce8;
+  --green:#22c55e;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--cyan:#06b6d4;
+  --green-bg:#052012;--red-bg:#200a0a;--amber-bg:#1f1200;--purple-bg:#150d2e;--cyan-bg:#041820;
+  --radius:10px;--radius-lg:14px;--radius-xl:18px;
+  --font:'Plus Jakarta Sans',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6}
+a{color:var(--accent);text-decoration:none}
+button{font-family:var(--font);cursor:pointer}
+input,select,textarea{font-family:var(--font)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ── LOGIN ── */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 20% 50%,rgba(79,142,247,.08) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(167,139,250,.06) 0%,transparent 50%)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xl);padding:48px 44px;width:100%;max-width:420px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.login-logo{display:flex;align-items:center;gap:12px;margin-bottom:32px}
+.login-logo-icon{width:44px;height:44px;background:var(--accent);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff}
+.login-logo-text{font-size:20px;font-weight:700;color:var(--text)}
+.login-logo-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.login-title{font-size:22px;font-weight:700;margin-bottom:6px}
+.login-sub{font-size:13px;color:var(--text2);margin-bottom:28px}
+.field{margin-bottom:18px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:var(--radius);font-size:14px;transition:.15s}
+.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,142,247,.15)}
+.input::placeholder{color:var(--text3)}
+select.input option{background:var(--surface2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;border-radius:var(--radius);font-size:13px;font-weight:600;border:none;transition:.15s;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-secondary{background:var(--surface3);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--border2);background:var(--surface2)}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid transparent}
+.btn-ghost:hover{background:var(--surface3);color:var(--text)}
+.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-danger:hover{background:rgba(239,68,68,.2)}
+.btn-sm{padding:6px 14px;font-size:12px}
+.btn-xs{padding:4px 10px;font-size:11px}
+.btn-block{width:100%;justify-content:center}
+.login-erro{color:var(--red);font-size:12px;margin-top:8px;min-height:18px}
+
+/* ── SHELL ── */
+#app-shell{display:none;flex-direction:row;min-height:100vh}
+.sidebar{width:240px;min-width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:0;position:fixed;top:0;left:0;height:100vh;z-index:100}
+.sidebar-logo{padding:20px 20px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.sidebar-logo-icon{width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
+.sidebar-logo-text{font-size:15px;font-weight:700}
+.sidebar-logo-sub{font-size:10px;color:var(--text2)}
+.sidebar-nav{flex:1;padding:12px 10px;overflow-y:auto}
+.nav-section{margin-bottom:4px}
+.nav-section-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;padding:10px 10px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;transition:.15s;border:none;background:none;width:100%;text-align:left;position:relative}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:rgba(79,142,247,.12);color:var(--accent)}
+.nav-item.active .nav-icon{color:var(--accent)}
+.nav-icon{font-size:16px;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;min-width:18px;text-align:center}
+.sidebar-user{padding:14px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.user-info{flex:1;min-width:0}
+.user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-role{font-size:11px;color:var(--text2)}
+.btn-logout{display:flex;align-items:center;gap:6px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;font-size:12px;font-weight:600;cursor:pointer;padding:6px 10px;border-radius:8px;transition:.15s;font-family:var(--font)}
+.btn-logout:hover{background:rgba(239,68,68,.25);border-color:rgba(239,68,68,.5);color:#fca5a5}
+
+/* ── MAIN ── */
+.main-content{margin-left:240px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:16px;position:sticky;top:0;z-index:50}
+.topbar-title{font-size:15px;font-weight:600;flex:1}
+.notif-btn{position:relative;background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer;padding:6px;border-radius:8px;transition:.15s}
+.notif-btn:hover{background:var(--surface2);color:var(--text)}
+.notif-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface);display:none}
+#page{padding:28px;flex:1}
+
+/* ── PAGE ELEMENTS ── */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px}
+.page-title{font-size:22px;font-weight:700;color:var(--text)}
+.page-sub{font-size:13px;color:var(--text2);margin-top:3px}
+.section-title{font-size:16px;font-weight:600}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
+.card-sm{padding:14px 18px}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.stat-card:hover{border-color:var(--border2);transform:translateY(-1px)}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+.stat-blue::before{background:var(--accent)}
+.stat-green::before{background:var(--green)}
+.stat-red::before{background:var(--red)}
+.stat-amber::before{background:var(--amber)}
+.stat-purple::before{background:var(--purple)}
+.stat-cyan::before{background:var(--cyan)}
+.stat-icon{font-size:22px;margin-bottom:10px}
+.stat-val{font-size:28px;font-weight:700;line-height:1}
+.stat-label{font-size:12px;color:var(--text2);margin-top:4px}
+.stat-sub{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* ── TABLE ── */
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;min-width:600px}
+.data-table thead th{background:var(--surface2);padding:11px 16px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);text-align:left;white-space:nowrap;border-bottom:1px solid var(--border)}
+.data-table tbody td{padding:12px 16px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:13px}
+.data-table tbody tr:last-child td{border-bottom:none}
+.data-table tbody tr{transition:.15s}
+.data-table tbody tr:hover{background:var(--surface2);cursor:pointer}
+.mono{font-family:var(--mono);font-size:12px;color:var(--accent)}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-blue{background:rgba(79,142,247,.15);color:#6ba4f9;border:1px solid rgba(79,142,247,.25)}
+.badge-green{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.25)}
+.badge-red{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.25)}
+.badge-amber{background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.25)}
+.badge-purple{background:rgba(167,139,250,.15);color:#c4b5fd;border:1px solid rgba(167,139,250,.25)}
+.badge-cyan{background:rgba(6,182,212,.15);color:#22d3ee;border:1px solid rgba(6,182,212,.25)}
+.badge-gray{background:rgba(139,149,176,.1);color:var(--text2);border:1px solid var(--border)}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s ease}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-xl);width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;animation:scaleIn .2s ease}
+.modal-header{padding:22px 26px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-title{font-size:17px;font-weight:700}
+.modal-body{padding:26px;overflow-y:auto;flex:1}
+.modal-footer{padding:18px 26px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0}
+.btn-close-modal{background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px}
+.btn-close-modal:hover{color:var(--text);background:var(--surface2)}
+
+/* ── FORM ── */
+.form-grid{display:grid;gap:16px}
+.form-grid-2{grid-template-columns:1fr 1fr}
+.form-grid-3{grid-template-columns:1fr 1fr 1fr}
+.field-group{display:flex;flex-direction:column;gap:5px}
+.field-label{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.field-hint{font-size:11px;color:var(--text3)}
+textarea.input{resize:vertical;min-height:80px}
+.required::after{content:' *';color:var(--red)}
+
+/* ── TIMELINE ── */
+.timeline{display:flex;flex-direction:column;gap:0}
+.timeline-item{display:flex;gap:14px;position:relative;padding-bottom:20px}
+.timeline-item:last-child{padding-bottom:0}
+.timeline-line{position:absolute;left:15px;top:28px;bottom:0;width:1px;background:var(--border)}
+.timeline-item:last-child .timeline-line{display:none}
+.timeline-dot{width:30px;height:30px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;z-index:1}
+.timeline-content{flex:1;padding-top:4px}
+.timeline-action{font-size:13px;font-weight:600}
+.timeline-meta{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* ── ANEXOS ── */
+.anexos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-top:12px}
+.anexo-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;text-align:center;cursor:pointer;transition:.15s}
+.anexo-item:hover{border-color:var(--accent)}
+.anexo-icon{font-size:28px}
+
+/* ── FILTER BAR ── */
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.filter-bar .input{flex:1;min-width:180px}
+
+/* ── PROGRESS ── */
+.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:.3s}
+
+/* ── TOAST ── */
+#toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:12px 18px;border-radius:var(--radius);font-size:13px;font-weight:500;display:flex;align-items:center;gap:10px;min-width:260px;max-width:380px;animation:slideIn .3s ease;pointer-events:all;border-left:3px solid}
+.toast-success{background:#0d2218;color:#4ade80;border-color:var(--green)}
+.toast-error{background:#200a0a;color:#f87171;border-color:var(--red)}
+.toast-warning{background:#1f1200;color:#fbbf24;border-color:var(--amber)}
+.toast-info{background:#0a1629;color:#6ba4f9;border-color:var(--accent)}
+
+/* ── CHECKLIST REQUISITOS ── */
+.req-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.req-item{display:flex;align-items:center;gap:10px;font-size:13px;padding:8px 12px;border-radius:var(--radius);background:var(--surface2)}
+.req-ok{color:var(--green)}
+.req-fail{color:var(--red)}
+
+/* ── CHARTS ── */
+.chart-wrap{position:relative;width:100%}
+
+/* ── PERIOD FILTER ── */
+.period-filter{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.period-btn{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:.15s}
+.period-btn:hover{border-color:var(--border2);color:var(--text)}
+.period-btn.active{background:rgba(79,142,247,.15);border-color:var(--accent);color:var(--accent)}
+.date-range{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.date-range input[type=date]{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:var(--radius);font-size:12px;font-family:var(--font)}
+.date-range input[type=date]:focus{outline:none;border-color:var(--accent)}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;background:var(--surface2);padding:4px;border-radius:var(--radius);width:fit-content;margin-bottom:20px}
+.tab{padding:7px 18px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:transparent;transition:.15s}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.tab:hover:not(.active){color:var(--text)}
+
+/* ── DIVIDER ── */
+.divider{height:1px;background:var(--border);margin:20px 0}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:60px 20px;color:var(--text2)}
+.empty-icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.empty-text{font-size:15px;font-weight:500}
+.empty-sub{font-size:13px;margin-top:4px;color:var(--text3)}
+
+/* ── SLA INDICATOR ── */
+.sla-ok{color:var(--green);font-size:12px;font-weight:600}
+.sla-warn{color:var(--amber);font-size:12px;font-weight:600}
+.sla-late{color:var(--red);font-size:12px;font-weight:600}
+.sla-closed{color:var(--text3);font-size:12px}
+
+/* ── UPLOAD AREA ── */
+.upload-area{border:2px dashed var(--border2);border-radius:var(--radius-lg);padding:28px;text-align:center;cursor:pointer;transition:.2s;background:var(--surface2)}
+.upload-area:hover,.upload-area.drag{border-color:var(--accent);background:rgba(79,142,247,.05)}
+.upload-icon{font-size:32px;margin-bottom:8px;opacity:.6}
+.upload-text{font-size:13px;color:var(--text2)}
+.upload-sub{font-size:11px;color:var(--text3);margin-top:4px}
+
+/* ── NOTIF PANEL ── */
+.notif-panel{position:fixed;top:56px;right:0;width:360px;background:var(--surface);border-left:1px solid var(--border);border-bottom:1px solid var(--border);border-radius:0 0 var(--radius-lg) var(--radius-lg);z-index:200;max-height:500px;overflow-y:auto;box-shadow:-8px 8px 30px rgba(0,0,0,.3);animation:slideIn .2s ease}
+.notif-item{padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:.15s}
+.notif-item:hover{background:var(--surface2)}
+.notif-item.unread{background:rgba(79,142,247,.05);border-left:3px solid var(--accent)}
+.notif-msg{font-size:13px}
+.notif-time{font-size:11px;color:var(--text3);margin-top:3px}
+
+/* ── RANKING ── */
+.rank-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface2);border-radius:var(--radius);margin-bottom:8px}
+.rank-pos{width:28px;height:28px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text2);flex-shrink:0}
+.rank-pos.gold{background:rgba(245,158,11,.2);color:var(--amber)}
+.rank-pos.silver{background:rgba(139,149,176,.2);color:#a0aec0}
+.rank-pos.bronze{background:rgba(180,100,50,.2);color:#c07040}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">P</div>
+      <div>
+        <div class="login-logo-text">PGMBox Suporte</div>
+        <div class="login-logo-sub">Sistema de Gestão de Chamados</div>
+      </div>
+    </div>
+    <div class="login-title">Bem-vindo de volta</div>
+    <div class="login-sub">Entre com suas credenciais para acessar o sistema.</div>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-email">E-mail</label>
+        <input id="login-email" type="email" class="input" placeholder="seu@email.com.br" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="login-senha">Senha</label>
+        <input id="login-senha" type="password" class="input" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <div class="login-erro" id="login-erro"></div>
+      <button type="button" id="login-btn" onclick="handleLoginClick()" class="btn btn-primary btn-block" style="margin-top:20px;padding:13px">Entrar</button>
+    </form>
+    <div style="text-align:center;margin-top:18px">
+      <button id="btn-esqueci" style="background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--font);transition:.15s">Esqueci minha senha</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP SHELL ══ -->
+<div id="app-shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">P</div>
+      <div>
+        <div class="sidebar-logo-text">PGMBox</div>
+        <div class="sidebar-logo-sub">Suporte</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-label">Principal</div>
+        <button class="nav-item" data-nav="dashboard" onclick="Router.go('dashboard')">
+          <span class="nav-icon">📊</span> Dashboard
+        </button>
+        <button class="nav-item" data-nav="chamados" onclick="Router.go('chamados')">
+          <span class="nav-icon">🎫</span> Chamados
+          <span class="nav-badge" id="badge-abertos" style="display:none">0</span>
+        </button>
+        <button class="nav-item" data-nav="novo-chamado" onclick="Router.go('novo-chamado')">
+          <span class="nav-icon">➕</span> Novo Chamado
+        </button>
+        <button class="nav-item" data-nav="fila" onclick="Router.go('fila')">
+          <span class="nav-icon">📥</span> Backlog
+          <span class="nav-badge" id="badge-fila" style="display:none">0</span>
+        </button>
+        <button class="nav-item" data-nav="sla" onclick="Router.go('sla')">
+          <span class="nav-icon">⏱️</span> Relatório SLA
+        </button>
+      </div>
+      <div class="nav-section" data-admin-only style="display:none">
+        <div class="nav-section-label">Administração</div>
+        <button class="nav-item" data-nav="usuarios" onclick="Router.go('usuarios')">
+          <span class="nav-icon">👥</span> Analistas
+        </button>
+        <button class="nav-item" data-nav="config" onclick="Router.go('config')">
+          <span class="nav-icon">⚙️</span> Configurações
+        </button>
+      </div>
+    </nav>
+    <div class="sidebar-user">
+      <div class="avatar" id="shell-avatar">EL</div>
+      <div class="user-info">
+        <div class="user-name" id="shell-user-name">Everton Lobo</div>
+        <div class="user-role" id="shell-user-role">👑 ADM</div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()" title="Sair do sistema">⎋ Sair</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <button class="notif-btn" onclick="location.reload()" title="Atualizar página" style="font-size:16px">↺</button>
+      <button class="notif-btn" onclick="toggleNotifPanel()" id="notif-btn" title="Notificações">
+        🔔 <span class="notif-dot" id="notif-badge"></span>
+      </button>
+    </div>
+    <div id="page"></div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  BANCO DE DADOS (localStorage + hash puro JS)
+// ═══════════════════════════════════════════════════════════
+const DB = (() => {
+  // Autenticação: senha em btoa (base64). Funciona em file://, http://, https://.
+  const _enc = pw => btoa(unescape(encodeURIComponent(String(pw))));
+  const _chk = (pw, stored) => _enc(pw) === stored;
+
+  const gc   = n => { try{return JSON.parse(localStorage.getItem('pgmbox_'+n)||'[]')}catch{return[]} };
+  const sc   = (n,d) => localStorage.setItem('pgmbox_'+n, JSON.stringify(d));
+  const gcfg = (k,d=null) => { const v=localStorage.getItem('pgmbox_cfg_'+k); return v!==null?JSON.parse(v):d };
+  const scfg = (k,v) => localStorage.setItem('pgmbox_cfg_'+k, JSON.stringify(v));
+
+  const APP_VERSION = '7.0';
+
+  function resetStorage() {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('pgmbox_')) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  }
+
+  function seed() {
+    const adminPw = _enc('Admin@2025');
+    // Reset if version mismatch, or if admin has wrong/missing senha field (old hash format)
+    const existingUsers = gc('users');
+    const existingAdmin = existingUsers.find(u => u.id === 'usr_admin');
+    const needsReset = gcfg('app_version') !== APP_VERSION
+      || !existingAdmin
+      || !existingAdmin.senha  // old versions used "passwordHash" not "senha"
+      || existingAdmin.senha === adminPw; // already correct — skip full reset, just ensure
+
+    if (gcfg('app_version') !== APP_VERSION || !existingAdmin || !existingAdmin.senha) {
+      // Full reset: old version or missing admin
+      resetStorage();
+      sc('users', [{id:'usr_admin',nome:'Everton Lobo',email:'everton@pgmbox.com.br',
+        perfil:'admin',nivel:null,ativo:true,senha:adminPw,criadoEm:new Date().toISOString()}]);
+      sc('chamados', []);
+      scfg('sla', {baixa:72,media:24,alta:8,critica:2});
+      scfg('smtp', {serviceId:'',templateId:'',publicKey:'',fromEmail:'suporte@pgmbox.com.br',fromName:'PGMBox Suporte'});
+      scfg('seq', 0);
+      scfg('app_version', APP_VERSION);
+      scfg('seeded', true);
+    } else {
+      // Version matches and admin exists with senha field — just ensure password is current
+      const users = gc('users');
+      const idx = users.findIndex(u => u.id === 'usr_admin');
+      if (idx !== -1) { users[idx].senha = adminPw; users[idx].ativo = true; sc('users', users); }
+    }
+  }
+
+  function login(email, pw) {
+    const users = gc('users');
+    const user = users.find(u => u.email === email && u.ativo);
+    if (!user) return {ok:false, msg:'Usuário não encontrado ou inativo.'};
+    if (!_chk(pw, user.senha)) return {ok:false, msg:'Senha incorreta.'};
+    sessionStorage.setItem('pgmbox_session', JSON.stringify(user));
+    return {ok:true, user};
+  }
+
+  function logout() { sessionStorage.removeItem('pgmbox_session'); }
+  function currentUser() { try{return JSON.parse(sessionStorage.getItem('pgmbox_session'))}catch{return null} }
+  function getUsers() { return gc('users'); }
+
+  function createUser({nome, email, perfil, nivel, password}) {
+    const users = gc('users');
+    if (users.find(u => u.email === email)) return {ok:false, msg:'E-mail já cadastrado.'};
+    const user = {id:'usr_'+Date.now(), nome, email, perfil, nivel:nivel||null,
+      ativo:true, senha:_enc(password), senhaTemporaria:true, criadoEm:new Date().toISOString()};
+    users.push(user); sc('users', users); return {ok:true, user};
+  }
+
+  function updateUser(id, fields) {
+    const users = gc('users'), i = users.findIndex(u => u.id === id);
+    if (i === -1) return {ok:false};
+    users[i] = {...users[i], ...fields}; sc('users', users); return {ok:true, user:users[i]};
+  }
+
+  function changePassword(id, newPw) {
+    return updateUser(id, {senha: _enc(newPw), senhaTemporaria: false});
+  }
+
+  function hashPassword(pw) { return _enc(pw); } // legacy alias
+
+  function gerarNumero() { const seq=(gcfg('seq',0))+1; scfg('seq',seq); return 'SCCD-'+String(seq).padStart(5,'0'); }
+
+  function createChamado({titulo,cliente,base,modulo,versao,descricao,prioridade,analista_id}) {
+    const chamados=gc('chamados'),user=currentUser();
+    const sla=gcfg('sla',{baixa:72,media:24,alta:8,critica:2});
+    const horas=sla[prioridade]||24;
+    const abertoEm=new Date();
+    const prazo=new Date(abertoEm.getTime()+horas*3600000);
+    const c={id:'cha_'+Date.now(),numero:gerarNumero(),titulo,cliente,base,modulo,versao,descricao,prioridade,
+      analista_id:analista_id||user?.id,abertoEm:abertoEm.toISOString(),prazoSLA:prazo.toISOString(),
+      status:'aberto',encerradoEm:null,
+      historico:[{data:abertoEm.toISOString(),usuario_id:user?.id,usuario_nome:user?.nome,acao:'Chamado aberto',status:'aberto'}],
+      anexos:[],passos:[],consultoria:null};
+    chamados.push(c); sc('chamados',chamados); return {ok:true,chamado:c};
+  }
+
+  function getChamados(filtros={}) {
+    let chamados=gc('chamados'); const user=currentUser(); if(!user) return [];
+    if(user.perfil==='analista'||user.perfil==='consultor')
+      chamados=chamados.filter(c=>c.analista_id===user.id||c.consultoria?.consultor_id===user.id);
+    if(filtros.status) chamados=chamados.filter(c=>c.status===filtros.status);
+    if(filtros.prioridade) chamados=chamados.filter(c=>c.prioridade===filtros.prioridade);
+    if(filtros.busca){const b=filtros.busca.toLowerCase();chamados=chamados.filter(c=>c.numero.toLowerCase().includes(b)||c.titulo.toLowerCase().includes(b)||c.cliente.toLowerCase().includes(b));}
+    if(filtros.de) chamados=chamados.filter(c=>new Date(c.abertoEm)>=new Date(filtros.de));
+    if(filtros.ate) chamados=chamados.filter(c=>new Date(c.abertoEm)<=new Date(filtros.ate+'T23:59:59'));
+    return chamados.sort((a,b)=>new Date(b.abertoEm)-new Date(a.abertoEm));
+  }
+
+  function getChamado(id) { return gc('chamados').find(c=>c.id===id)||null; }
+
+  function updateChamado(id,fields,acao=null) {
+    const chamados=gc('chamados'),idx=chamados.findIndex(c=>c.id===id);
+    if(idx===-1) return {ok:false};
+    const user=currentUser();
+    if(acao) chamados[idx].historico.push({data:new Date().toISOString(),usuario_id:user?.id,usuario_nome:user?.nome,acao,status:fields.status||chamados[idx].status});
+    chamados[idx]={...chamados[idx],...fields}; sc('chamados',chamados); return {ok:true,chamado:chamados[idx]};
+  }
+
+  function adicionarAnexo(cid,anexo) {
+    const c=getChamado(cid); if(!c) return {ok:false};
+    c.anexos.push({id:'anx_'+Date.now(),...anexo,data:new Date().toISOString()});
+    return updateChamado(cid,{anexos:c.anexos});
+  }
+
+  function adicionarPasso(cid,passo) {
+    const c=getChamado(cid); if(!c) return {ok:false};
+    c.passos.push({ordem:c.passos.length+1,descricao:passo});
+    return updateChamado(cid,{passos:c.passos});
+  }
+
+  function verificarRequisitos(cid) {
+    const c=getChamado(cid); if(!c) return {ok:false,erros:['Chamado não encontrado']};
+    const erros=[];
+    if(!c.descricao||c.descricao.trim().length<20) erros.push('Descrição do problema incompleta (mín. 20 caracteres).');
+    if(!c.passos||c.passos.length===0) erros.push('Passo a passo não informado.');
+    if(!c.anexos||c.anexos.length===0) erros.push('Nenhuma evidência anexada.');
+    if(!c.anexos.some(a=>['image','video'].includes(a.categoria))) erros.push('Evidência visual (print ou vídeo) não anexada.');
+    return {ok:erros.length===0,erros};
+  }
+
+  function enviarParaConsultoria(cid,obs) {
+    const req=verificarRequisitos(cid); if(!req.ok) return {ok:false,erros:req.erros};
+    const user=currentUser();
+    return updateChamado(cid,{status:'consultoria',consultoria:{consultor_id:null,obs,enviado_por:user?.id,enviadoEm:new Date().toISOString()}},'Chamado enviado para consultoria');
+  }
+
+  function mudarStatus(cid,novoStatus,obs='') {
+    const labels={aberto:'Chamado aberto',em_atendimento:'Atendimento iniciado',aguardando_cliente:'Aguardando retorno do cliente',consultoria:'Enviado para consultoria',resolvido:'Marcado como resolvido',encerrado:'Chamado encerrado'};
+    const extra=novoStatus==='encerrado'?{encerradoEm:new Date().toISOString()}:{};
+    return updateChamado(cid,{status:novoStatus,...extra},obs?labels[novoStatus]+': '+obs:labels[novoStatus]);
+  }
+
+  function getSLA() { return gcfg('sla',{baixa:72,media:24,alta:8,critica:2}); }
+  function setSLA(sla) { scfg('sla',sla); return {ok:true}; }
+  function getSMTP() { return gcfg('smtp',{}); }
+  function setSMTP(smtp) { scfg('smtp',smtp); return {ok:true}; }
+
+  function addNotificacao(uid,msg,cid=null) {
+    const n=gc('notificacoes');
+    n.push({id:'ntf_'+Date.now(),user_id:uid,msg,chamado_id:cid,lida:false,data:new Date().toISOString()});
+    sc('notificacoes',n);
+  }
+  function getNotificacoes(uid) { return gc('notificacoes').filter(n=>n.user_id===uid).sort((a,b)=>new Date(b.data)-new Date(a.data)); }
+  function marcarLida(id) {
+    const n=gc('notificacoes'),idx=n.findIndex(x=>x.id===id);
+    if(idx!==-1){n[idx].lida=true;sc('notificacoes',n);}
+  }
+
+  return {seed,resetStorage,hashPassword,login,logout,currentUser,getUsers,createUser,updateUser,changePassword,
+    createChamado,getChamados,getChamado,updateChamado,adicionarAnexo,adicionarPasso,
+    verificarRequisitos,enviarParaConsultoria,mudarStatus,getSLA,setSLA,getSMTP,setSMTP,
+    addNotificacao,getNotificacoes,marcarLida};
+})();
+
+// ═══════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function toast(msg, tipo='info') {
+  const c=document.getElementById('toast-container');
+  const t=document.createElement('div');
+  const icons={success:'✓',error:'✕',warning:'⚠',info:'ℹ'};
+  t.className=`toast toast-${tipo}`;
+  t.innerHTML=`<span style="font-weight:700;flex-shrink:0">${icons[tipo]}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(100%)';t.style.transition='.3s';setTimeout(()=>t.remove(),300)},3000);
+}
+
+function prioBadge(p) {
+  const m={baixa:['badge-green','▼ Baixa'],media:['badge-amber','● Média'],alta:['badge-red','▲ Alta'],critica:['badge-red','🔴 Crítica']};
+  const [cls,label]=m[p]||['badge-gray',p];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function statusBadge(s) {
+  const m={aberto:['badge-blue','● Aberto'],em_atendimento:['badge-purple','● Em Atend.'],aguardando_cliente:['badge-amber','● Ag. Cliente'],consultoria:['badge-cyan','● Consultoria'],resolvido:['badge-green','● Resolvido'],encerrado:['badge-gray','● Encerrado']};
+  const [cls,label]=m[s]||['badge-gray',s];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function slaInfo(prazo, status) {
+  if(['encerrado','resolvido'].includes(status)) return '<span class="sla-closed">—</span>';
+  const diff=new Date(prazo)-new Date();
+  if(diff<0) return '<span class="sla-late">⚠ Vencido</span>';
+  const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000);
+  if(diff<3600000) return `<span class="sla-late">⏱ ${h}h ${m}m</span>`;
+  if(diff<7200000) return `<span class="sla-warn">⏱ ${h}h ${m}m</span>`;
+  return `<span class="sla-ok">⏱ ${h}h ${m}m</span>`;
+}
+
+function fmtDate(iso) {
+  if(!iso) return '—';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function fmtDateShort(iso) {
+  if(!iso) return '—';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function fmtDuracao(isoInicio) {
+  if(!isoInicio) return '—';
+  const diff = Date.now() - new Date(isoInicio).getTime();
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if(h >= 24) { const d = Math.floor(h/24); return `${d}d ${h%24}h`; }
+  if(h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function corDuracao(isoInicio) {
+  const diff = Date.now() - new Date(isoInicio).getTime();
+  if(diff > 86400000) return 'var(--red)';
+  if(diff > 14400000) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+function perfilLabel(u) {
+  if(u.perfil==='admin') return '👑 ADM';
+  if(u.perfil==='consultor') return '🎯 Consultor';
+  if(u.perfil==='analista') return `🔧 Analista N${u.nivel}`;
+  return u.perfil;
+}
+
+function openModal(html, maxWidth='600px') {
+  closeModals();
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay';
+  overlay.innerHTML=`<div class="modal" style="max-width:${maxWidth}">${html}</div>`;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+  document.body.appendChild(overlay);
+  return overlay;
+}
+function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m=>m.remove()); }
+
+function updateShell(user) {
+  document.getElementById('shell-user-name').textContent=user.nome;
+  document.getElementById('shell-user-role').textContent=perfilLabel(user);
+  document.getElementById('shell-avatar').textContent=user.nome.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.querySelectorAll('[data-admin-only]').forEach(el=>el.style.display=user.perfil==='admin'?'block':'none');
+  updateNotifBadge();
+  updateBadgeAbertos();
+  updateBadgeFila();
+}
+
+function updateNotifBadge() {
+  const user=DB.currentUser(); if(!user) return;
+  const unread=DB.getNotificacoes(user.id).filter(n=>!n.lida).length;
+  const dot=document.getElementById('notif-badge');
+  if(dot) dot.style.display=unread?'block':'none';
+}
+
+function updateBadgeAbertos() {
+  const badge=document.getElementById('badge-abertos');
+  if(!badge) return;
+  const count=DB.getChamados({status:'aberto'}).length;
+  badge.textContent=count; badge.style.display=count?'inline':'none';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ROUTER
+// ═══════════════════════════════════════════════════════════
+const Router = (() => {
+  const routes={};
+  function register(path,fn){routes[path]=fn;}
+  function go(path,params={}) {
+    const user=DB.currentUser();
+    if(!user&&path!=='login'){go('login');return;}
+    if(user&&path==='login'){go('dashboard');return;}
+    window._params=params;
+    const fn=routes[path];
+    if(fn){fn(params);updateNav(path);document.getElementById('topbar-title').textContent=navTitles[path]||'PGMBox';}
+    else go('dashboard');
+  }
+  function updateNav(active){document.querySelectorAll('[data-nav]').forEach(el=>el.classList.toggle('active',el.dataset.nav===active));}
+  return {register,go};
+})();
+
+const navTitles={dashboard:'Dashboard',chamados:'Chamados',sla:'Relatório SLA','novo-chamado':'Novo Chamado',usuarios:'Analistas',config:'Configurações',chamado:'Detalhe do Chamado',fila:'Backlog — Aguardando Recategorização'};
+
+// ═══════════════════════════════════════════════════════════
+//  LOGIN / LOGOUT
+// ═══════════════════════════════════════════════════════════
+Router.register('login',()=>{
+  document.getElementById('app-shell').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+});
+
+function forcarReset() {
+  // Sem confirm() — bloqueado em file://. Usa modal HTML próprio.
+  const d = document.createElement('div');
+  d.id = 'reset-confirm-overlay';
+  d.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  d.innerHTML = '<div style="background:#1e2330;border:1px solid #ef4444;border-radius:14px;padding:28px;max-width:380px;width:100%;text-align:center">' +
+    '<div style="font-size:36px;margin-bottom:12px">⚠️</div>' +
+    '<div style="font-size:16px;font-weight:700;color:#e8eaf0;margin-bottom:8px">Redefinir sistema?</div>' +
+    '<div style="font-size:13px;color:#8b95b0;margin-bottom:20px">Apaga todos os dados locais e recria o usuário admin com a senha padrão.</div>' +
+    '<div style="display:flex;gap:10px;justify-content:center">' +
+    '<button onclick="document.getElementById(\'reset-confirm-overlay\').remove()" style="padding:10px 20px;border-radius:8px;border:1px solid #333d55;background:transparent;color:#8b95b0;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>' +
+    '<button onclick="executarReset()" style="padding:10px 20px;border-radius:8px;border:none;background:#ef4444;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Sim, redefinir</button>' +
+    '</div></div>';
+  document.body.appendChild(d);
+}
+
+function executarReset() {
+  const overlay = document.getElementById('reset-confirm-overlay');
+  if (overlay) overlay.remove();
+  DB.resetStorage();
+  DB.seed();
+  const erroEl = document.getElementById('login-erro');
+  if (erroEl) { erroEl.style.color='var(--green)'; erroEl.textContent='✓ Sistema redefinido! Email: everton@pgmbox.com.br | Senha: Admin@2025'; }
+  const emailEl = document.getElementById('login-email');
+  if (emailEl) emailEl.value = 'everton@pgmbox.com.br';
+  const senhaEl = document.getElementById('login-senha');
+  if (senhaEl) senhaEl.value = '';
+  senhaEl && senhaEl.focus();
+}
+
+function doLogout() {
+  DB.logout();
+  document.getElementById('app-shell').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  // Re-wire listeners (form may have been recreated by voltarLogin)
+  const form = document.getElementById('login-form');
+  const errEl = document.getElementById('login-erro');
+  if(form) { form.reset(); form.addEventListener('submit', handleLogin); }
+  if(errEl) errEl.textContent='';
+  const btnE = document.getElementById('btn-esqueci');
+  if(btnE) btnE.addEventListener('click', mostrarEsqueciSenha);
+}
+
+function handleLoginClick() {
+  const email = (document.getElementById('login-email') || {}).value || '';
+  const senha = (document.getElementById('login-senha') || {}).value || '';
+  const erroEl = document.getElementById('login-erro');
+  const btn = document.getElementById('login-btn');
+  if (!email || !senha) {
+    if (erroEl) erroEl.textContent = 'Preencha e-mail e senha.';
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
+  const res = DB.login(email.trim(), senha);
+  if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
+  if (res.ok) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'flex';
+    updateShell(res.user);
+    Router.go('dashboard');
+    verificarSenhaTemporaria(res.user);
+  } else {
+    if (erroEl) { erroEl.style.color = 'var(--red)'; erroEl.textContent = res.msg; }
+  }
+}
+
+function handleLogin(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  handleLoginClick();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ESQUECI MINHA SENHA
+// ═══════════════════════════════════════════════════════════
+function mostrarEsqueciSenha() {
+  const card = document.querySelector('.login-card');
+  card.innerHTML = `
+    <div class="login-logo">
+      <div class="login-logo-icon">P</div>
+      <div>
+        <div class="login-logo-text">PGMBox Suporte</div>
+        <div class="login-logo-sub">Sistema de Gestão de Chamados</div>
+      </div>
+    </div>
+    <div class="login-title">Recuperar senha</div>
+    <div class="login-sub">Informe seu e-mail cadastrado. Você receberá uma senha temporária para acessar o sistema.</div>
+    <div class="field">
+      <label for="rec-email">E-mail</label>
+      <input id="rec-email" type="email" class="input" placeholder="seu@email.com.br" autocomplete="email">
+    </div>
+    <div class="login-erro" id="rec-erro"></div>
+    <button id="rec-btn" class="btn btn-primary btn-block" style="margin-top:20px;padding:13px">Enviar senha temporária</button>
+    <div style="text-align:center;margin-top:18px">
+      <button id="btn-voltar-login" style="background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--font)">← Voltar ao login</button>
+    </div>
+  `;
+  document.getElementById('rec-btn').addEventListener('click', enviarSenhaTemp);
+  document.getElementById('btn-voltar-login').addEventListener('click', voltarLogin);
+  document.getElementById('rec-email').focus();
+}
+
+function voltarLogin() {
+  const card = document.querySelector('.login-card');
+  card.innerHTML = `
+    <div class="login-logo">
+      <div class="login-logo-icon">P</div>
+      <div>
+        <div class="login-logo-text">PGMBox Suporte</div>
+        <div class="login-logo-sub">Sistema de Gestão de Chamados</div>
+      </div>
+    </div>
+    <div class="login-title">Bem-vindo de volta</div>
+    <div class="login-sub">Entre com suas credenciais para acessar o sistema.</div>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-email">E-mail</label>
+        <input id="login-email" type="email" class="input" placeholder="seu@email.com.br" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="login-senha">Senha</label>
+        <input id="login-senha" type="password" class="input" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <div class="login-erro" id="login-erro"></div>
+      <button type="button" id="login-btn" onclick="handleLoginClick()" class="btn btn-primary btn-block" style="margin-top:20px;padding:13px">Entrar</button>
+    </form>
+    <div style="text-align:center;margin-top:18px">
+      <button id="btn-esqueci" style="background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--font)">Esqueci minha senha</button>
+    </div>
+  `;
+  document.getElementById('login-form').addEventListener('submit', handleLogin);
+  document.getElementById('btn-esqueci').addEventListener('click', mostrarEsqueciSenha);
+  document.getElementById('login-email').focus();
+}
+
+function gerarSenhaTemp() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!';
+  let senha = '';
+  // Garante ao menos 1 maiúscula, 1 minúscula, 1 número, 1 especial
+  senha += 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)];
+  senha += 'abcdefghjkmnpqrstuvwxyz'[Math.floor(Math.random()*23)];
+  senha += '23456789'[Math.floor(Math.random()*8)];
+  senha += '@#!'[Math.floor(Math.random()*3)];
+  for(let i=4;i<10;i++) senha += chars[Math.floor(Math.random()*chars.length)];
+  // Embaralha
+  return senha.split('').sort(()=>Math.random()-.5).join('');
+}
+
+async function enviarEmailJS(para, nome, assunto, mensagem, senhaTemp) {
+  const smtp = DB.getSMTP();
+  // Registra no log independente do resultado
+  const logEntry = { para, assunto, status: 'pendente', data: new Date().toISOString() };
+  const logs = JSON.parse(localStorage.getItem('pgmbox_email_log') || '[]');
+
+  if (!smtp.serviceId || !smtp.templateId || !smtp.publicKey) {
+    logEntry.status = 'simulado (SMTP não configurado)';
+    logs.unshift(logEntry);
+    localStorage.setItem('pgmbox_email_log', JSON.stringify(logs.slice(0, 200)));
+    console.info('[PGMBox] E-mail simulado para:', para, '| Senha temp:', senhaTemp);
+    return { ok: true, simulado: true };
+  }
+
+  try {
+    // Carrega EmailJS SDK se ainda não estiver carregado
+    await new Promise((resolve, reject) => {
+      if (window.emailjs) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+      s.onload = () => { emailjs.init({ publicKey: smtp.publicKey }); resolve(); };
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+    await emailjs.send(smtp.serviceId, smtp.templateId, {
+      to_email: para,
+      to_name: nome || para,
+      subject: assunto,
+      from_name: smtp.fromName || 'PGMBox Suporte',
+      reply_to: smtp.fromEmail || 'suporte@pgmbox.com.br',
+      mensagem: mensagem,
+      senha_temp: senhaTemp,
+      numero: '—', titulo: '—', status: '—', prazo: '—'
+    });
+
+    logEntry.status = 'enviado';
+    logs.unshift(logEntry);
+    localStorage.setItem('pgmbox_email_log', JSON.stringify(logs.slice(0, 200)));
+    return { ok: true };
+  } catch (e) {
+    logEntry.status = 'erro: ' + e.message;
+    logs.unshift(logEntry);
+    localStorage.setItem('pgmbox_email_log', JSON.stringify(logs.slice(0, 200)));
+    return { ok: false, msg: e.message };
+  }
+}
+
+function enviarSenhaTemp() {
+  const email = document.getElementById('rec-email')?.value?.trim();
+  const erroEl = document.getElementById('rec-erro');
+  const btn = document.getElementById('rec-btn');
+
+  if (!email) { erroEl.textContent = 'Informe o e-mail.'; return; }
+
+  const users = DB.getUsers();
+  const user = users.find(u => u.email === email && u.ativo);
+  const msgGenerica = 'Se este e-mail estiver cadastrado, você receberá a senha temporária em breve.';
+
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  // Simula delay de 1.2s (segurança: não vaza se e-mail existe por timing)
+  setTimeout(async () => {
+    if (user) {
+      const senhaTemp = gerarSenhaTemp();
+      DB.changePassword(user.id, senhaTemp);
+      DB.updateUser(user.id, { senhaTemporaria: true });
+
+      const mensagem = `Olá ${user.nome},\n\nVocê solicitou a recuperação de senha no PGMBox Suporte.\n\nSua senha temporária é:\n\n${senhaTemp}\n\nUse-a para fazer login. Por segurança, você será solicitado a criar uma nova senha ao entrar.\n\nEssa senha é válida para um único acesso.\n\nPGMBox Suporte`;
+      const res = await enviarEmailJS(user.email, user.nome, '[PGMBox] Senha temporária de acesso', mensagem, senhaTemp);
+
+      if (res.simulado) {
+        erroEl.style.color = 'var(--green)';
+        erroEl.innerHTML = `${msgGenerica}<br><br><span style="font-size:11px;color:var(--amber)">⚠ SMTP não configurado — modo demo.<br>Senha gerada: <strong style="font-family:var(--mono);font-size:13px;letter-spacing:1px;color:var(--text)">${senhaTemp}</strong></span>`;
+        btn.disabled = false; btn.textContent = 'Enviar senha temporária';
+        return;
+      }
+    }
+    btn.disabled = false; btn.textContent = 'Enviar senha temporária';
+    erroEl.style.color = 'var(--green)';
+    erroEl.textContent = msgGenerica;
+  }, 1200);
+}
+
+// ─── Trocar senha temporária após login ───────────────────
+function verificarSenhaTemporaria(user) {
+  if (!user.senhaTemporaria) return;
+  // Abre modal obrigatório de troca de senha — não pode ser dispensado
+  setTimeout(() => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText += ';pointer-events:all';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:460px">
+        <div class="modal-header" style="background:rgba(79,142,247,.08);border-bottom:1px solid rgba(79,142,247,.2)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:22px">🔑</span>
+            <div>
+              <div class="modal-title">Primeiro acesso — crie sua senha</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:1px">Obrigatório antes de continuar</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;margin-bottom:20px;font-size:13px;color:var(--text2);display:flex;gap:10px;align-items:flex-start">
+            <span style="font-size:16px;flex-shrink:0">ℹ️</span>
+            <span>Sua conta foi criada com uma senha temporária. Por segurança, defina uma senha pessoal agora. Ela não será conhecida por ninguém.</span>
+          </div>
+          <div class="form-grid" style="gap:14px">
+            <div class="field-group">
+              <label class="field-label required">Nova senha</label>
+              <input id="ns-nova" type="password" class="input" placeholder="Mínimo 8 caracteres" minlength="8"
+                oninput="atualizarForcaSenha(this.value)">
+              <div style="margin-top:8px">
+                <div style="display:flex;gap:4px;margin-bottom:4px">
+                  <div id="ns-f1" style="height:4px;flex:1;border-radius:2px;background:var(--border);transition:.3s"></div>
+                  <div id="ns-f2" style="height:4px;flex:1;border-radius:2px;background:var(--border);transition:.3s"></div>
+                  <div id="ns-f3" style="height:4px;flex:1;border-radius:2px;background:var(--border);transition:.3s"></div>
+                  <div id="ns-f4" style="height:4px;flex:1;border-radius:2px;background:var(--border);transition:.3s"></div>
+                </div>
+                <div id="ns-forca-label" style="font-size:11px;color:var(--text3)">
+                  Requisitos: 8+ caracteres · 1 maiúscula · 1 número
+                </div>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label required">Confirmar senha</label>
+              <input id="ns-confirma" type="password" class="input" placeholder="Repita a nova senha"
+                oninput="verificarConfirmacao(this.value)">
+              <div id="ns-match" style="font-size:11px;margin-top:5px;min-height:14px"></div>
+            </div>
+          </div>
+          <div id="ns-erro" style="color:var(--red);font-size:12px;margin-top:12px;min-height:16px"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="ns-btn" class="btn btn-primary btn-block" style="padding:13px"
+            onclick="salvarNovaSenha('${user.id}',this.closest('.modal-overlay'))">
+            Salvar e continuar
+          </button>
+        </div>
+      </div>
+    `;
+    // Bloqueia fechar clicando fora e via ESC
+    overlay.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('keydown', function bloqEsc(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); }
+      if (!document.body.contains(overlay)) document.removeEventListener('keydown', bloqEsc);
+    }, true);
+    document.body.appendChild(overlay);
+    document.getElementById('ns-nova')?.focus();
+  }, 300);
+}
+
+function atualizarForcaSenha(valor) {
+  let pontos = 0;
+  if (valor.length >= 8) pontos++;
+  if (/[A-Z]/.test(valor)) pontos++;
+  if (/[0-9]/.test(valor)) pontos++;
+  if (/[^A-Za-z0-9]/.test(valor)) pontos++;
+  const cores = ['','#ef4444','#f59e0b','#4f8ef7','#22c55e'];
+  const labels = ['','Fraca','Razoável','Boa','Forte'];
+  for (let i=1;i<=4;i++) {
+    const el = document.getElementById('ns-f'+i);
+    if (el) el.style.background = i<=pontos ? cores[pontos] : 'var(--border)';
+  }
+  const lbl = document.getElementById('ns-forca-label');
+  if (lbl) {
+    if (!valor) {
+      lbl.textContent = 'Requisitos: 8+ caracteres · 1 maiúscula · 1 número';
+      lbl.style.color = 'var(--text3)';
+    } else {
+      lbl.textContent = `Força: ${labels[pontos] || 'Muito fraca'}`;
+      lbl.style.color = cores[pontos] || '#ef4444';
+    }
+  }
+  // Recheckar confirmação se já preenchida
+  const conf = document.getElementById('ns-confirma')?.value;
+  if (conf) verificarConfirmacao(conf);
+}
+
+function verificarConfirmacao(conf) {
+  const nova = document.getElementById('ns-nova')?.value;
+  const el = document.getElementById('ns-match');
+  if (!el || !conf) return;
+  if (nova === conf) {
+    el.textContent = '✓ Senhas coincidem';
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = '✕ Senhas não coincidem';
+    el.style.color = 'var(--red)';
+  }
+}
+
+function salvarNovaSenha(userId, overlay) {
+  const nova = document.getElementById('ns-nova')?.value;
+  const confirma = document.getElementById('ns-confirma')?.value;
+  const erroEl = document.getElementById('ns-erro');
+
+  if (!nova || nova.length < 8) { erroEl.textContent = 'A senha deve ter no mínimo 8 caracteres.'; return; }
+  if (nova !== confirma) { erroEl.textContent = 'As senhas não coincidem.'; return; }
+  if (!/[A-Z]/.test(nova)) { erroEl.textContent = 'Inclua ao menos uma letra maiúscula.'; return; }
+  if (!/[0-9]/.test(nova)) { erroEl.textContent = 'Inclua ao menos um número.'; return; }
+
+  const btn = document.getElementById('ns-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  DB.changePassword(userId, nova);
+  DB.updateUser(userId, { senhaTemporaria: false });
+
+  const userAtualizado = DB.getUsers().find(u => u.id === userId);
+  if (userAtualizado) sessionStorage.setItem('pgmbox_session', JSON.stringify(userAtualizado));
+
+  overlay.remove();
+  toast('Senha criada com sucesso! Bem-vindo ao PGMBox.', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  NOTIFICAÇÕES
+// ═══════════════════════════════════════════════════════════
+let notifOpen=false;
+function toggleNotifPanel() {
+  let panel=document.getElementById('notif-panel');
+  if(panel){panel.remove();notifOpen=false;return;}
+  notifOpen=true;
+  const user=DB.currentUser(); if(!user) return;
+  const notifs=DB.getNotificacoes(user.id).slice(0,20);
+  panel=document.createElement('div');
+  panel.id='notif-panel'; panel.className='notif-panel';
+  panel.innerHTML=`
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-weight:600;font-size:14px">Notificações</span>
+      <button onclick="marcarTodasLidas()" class="btn btn-ghost btn-xs">Marcar todas lidas</button>
+    </div>
+    ${notifs.length?notifs.map(n=>`
+      <div class="notif-item ${n.lida?'':'unread'}" onclick="DB.marcarLida('${n.id}');updateNotifBadge();${n.chamado_id?`Router.go('chamado',{id:'${n.chamado_id}'});`:''}toggleNotifPanel()">
+        <div class="notif-msg">${n.msg}</div>
+        <div class="notif-time">${fmtDate(n.data)}</div>
+      </div>`).join(''):'<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">Sem notificações</div>'}
+  `;
+  document.body.appendChild(panel);
+  setTimeout(()=>document.addEventListener('click',closeNotifOnOutside,{once:true}),50);
+}
+function closeNotifOnOutside(e) {
+  const p=document.getElementById('notif-panel'),btn=document.getElementById('notif-btn');
+  if(p&&!p.contains(e.target)&&!btn.contains(e.target)){p.remove();notifOpen=false;}
+}
+function marcarTodasLidas() {
+  const user=DB.currentUser(); if(!user) return;
+  DB.getNotificacoes(user.id).forEach(n=>DB.marcarLida(n.id));
+  updateNotifBadge(); toggleNotifPanel(); toggleNotifPanel();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════════════
+Router.register('dashboard',()=>{
+  document.getElementById('app-shell').style.display='flex';
+  document.getElementById('login-screen').style.display='none';
+  const user=DB.currentUser();
+  const todos=DB.getChamados();
+  const ativos=todos.filter(c=>!['encerrado','resolvido'].includes(c.status));
+  const abertos=todos.filter(c=>c.status==='aberto').length;
+  const emAtend=todos.filter(c=>c.status==='em_atendimento').length;
+  const consultoria=todos.filter(c=>c.status==='consultoria').length;
+  const vencidos=ativos.filter(c=>new Date(c.prazoSLA)<new Date()).length;
+  const slaVencendo=ativos.filter(c=>{const d=new Date(c.prazoSLA)-new Date();return d>0&&d<7200000;}).length;
+  const recentes=todos.slice(0,6);
+
+  document.getElementById('page').innerHTML=`
+    <div class="page-header">
+      <div>
+        <div class="page-title">Olá, ${user.nome.split(' ')[0]} 👋</div>
+        <div class="page-sub">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+      </div>
+      <button class="btn btn-primary" onclick="Router.go('novo-chamado')">+ Novo Chamado</button>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card stat-blue" onclick="Router.go('chamados')">
+        <div class="stat-icon">🎫</div>
+        <div class="stat-val">${todos.length}</div>
+        <div class="stat-label">Total de Chamados</div>
+      </div>
+      <div class="stat-card stat-amber" onclick="Router.go('chamados',{status:'aberto'})">
+        <div class="stat-icon">🔵</div>
+        <div class="stat-val">${abertos}</div>
+        <div class="stat-label">Abertos</div>
+      </div>
+      <div class="stat-card stat-purple" onclick="Router.go('chamados',{status:'em_atendimento'})">
+        <div class="stat-icon">🟣</div>
+        <div class="stat-val">${emAtend}</div>
+        <div class="stat-label">Em Atendimento</div>
+      </div>
+      <div class="stat-card stat-cyan" onclick="Router.go('chamados',{status:'consultoria'})">
+        <div class="stat-icon">🔷</div>
+        <div class="stat-val">${consultoria}</div>
+        <div class="stat-label">Consultoria</div>
+      </div>
+      <div class="stat-card stat-red">
+        <div class="stat-icon">⚠️</div>
+        <div class="stat-val">${vencidos}</div>
+        <div class="stat-label">SLA Vencido</div>
+        ${slaVencendo?`<div class="stat-sub" style="color:var(--amber)">+${slaVencendo} vencendo em breve</div>`:''}
+      </div>
+    </div>
+
+    <div class="section-header">
+      <div class="section-title">Chamados Recentes</div>
+      <button class="btn btn-ghost btn-sm" onclick="Router.go('chamados')">Ver todos →</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Número</th><th>Título</th><th>Cliente</th><th>Prioridade</th><th>Status</th><th>SLA</th><th>Abertura</th></tr></thead>
+        <tbody>
+          ${recentes.length?recentes.map(c=>`
+            <tr onclick="Router.go('chamado',{id:'${c.id}'})">
+              <td><span class="mono">${c.numero}</span></td>
+              <td style="max-width:180px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.titulo}</div></td>
+              <td style="font-size:12px">${c.cliente}</td>
+              <td>${prioBadge(c.prioridade)}</td>
+              <td>${statusBadge(c.status)}</td>
+              <td>${slaInfo(c.prazoSLA,c.status)}</td>
+              <td style="font-size:12px;color:var(--text2)">${fmtDateShort(c.abertoEm)}</td>
+            </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Nenhum chamado</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+});
+
+// ═══════════════════════════════════════════════════════════
+//  LISTA DE CHAMADOS
+// ═══════════════════════════════════════════════════════════
+Router.register('chamados',(params={})=>{
+  let filtros={...params};
+  function render() {
+    const chamados=DB.getChamados(filtros);
+    const users=DB.getUsers();
+    document.getElementById('page').innerHTML=`
+      <div class="page-header">
+        <div><div class="page-title">Chamados</div><div class="page-sub">${chamados.length} resultado(s)</div></div>
+        <button class="btn btn-primary" onclick="Router.go('novo-chamado')">+ Novo Chamado</button>
+      </div>
+      <div class="filter-bar">
+        <input class="input" placeholder="Buscar número, título ou cliente..." value="${filtros.busca||''}" oninput="filtros.busca=this.value;render()" style="max-width:280px">
+        <select class="input" style="max-width:180px" onchange="filtros.status=this.value;render()">
+          <option value="">Todos status</option>
+          ${['aberto','em_atendimento','aguardando_cliente','consultoria','resolvido','encerrado'].map(s=>`<option value="${s}" ${filtros.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('')}
+        </select>
+        <select class="input" style="max-width:150px" onchange="filtros.prioridade=this.value;render()">
+          <option value="">Todas prioridades</option>
+          ${['critica','alta','media','baixa'].map(p=>`<option value="${p}" ${filtros.prioridade===p?'selected':''}>${p.charAt(0).toUpperCase()+p.slice(1)}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="filtros={};render()">✕ Limpar</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Número</th><th>Título</th><th>Cliente</th><th>Analista</th><th>Prioridade</th><th>Status</th><th>SLA</th><th>Abertura</th></tr></thead>
+          <tbody>
+            ${chamados.length?chamados.map(c=>{
+              const an=users.find(u=>u.id===c.analista_id);
+              return `<tr onclick="Router.go('chamado',{id:'${c.id}'})">
+                <td><span class="mono">${c.numero}</span></td>
+                <td style="max-width:160px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.titulo}</div></td>
+                <td style="font-size:12px">${c.cliente}</td>
+                <td style="font-size:12px">${an?.nome||'—'}</td>
+                <td>${prioBadge(c.prioridade)}</td>
+                <td>${statusBadge(c.status)}</td>
+                <td>${slaInfo(c.prazoSLA,c.status)}</td>
+                <td style="font-size:12px;color:var(--text2)">${fmtDateShort(c.abertoEm)}</td>
+              </tr>`;
+            }).join(''):'<tr><td colspan="8" style="text-align:center;padding:50px;color:var(--text3)"><div class="empty-icon">🔍</div><div>Nenhum chamado encontrado</div></td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+    window.render=render;
+    window.filtros=filtros;
+  }
+  render();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  NOVO CHAMADO
+// ═══════════════════════════════════════════════════════════
+Router.register('novo-chamado',()=>{
+  const user=DB.currentUser();
+  const analistas=DB.getUsers().filter(u=>['analista','admin'].includes(u.perfil)&&u.ativo);
+  document.getElementById('page').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Novo Chamado</div><div class="page-sub">Preencha todos os campos obrigatórios</div></div>
+      <button class="btn btn-ghost" onclick="Router.go('chamados')">← Voltar</button>
+    </div>
+    <div class="card" style="max-width:800px">
+      <form onsubmit="submitNovoChamado(event)">
+        <div class="form-grid form-grid-2" style="margin-bottom:16px">
+          <div class="field-group">
+            <label class="field-label required">Título / Descrição Breve</label>
+            <input name="titulo" class="input" required placeholder="Ex: Erro ao gerar relatório PDF">
+          </div>
+          <div class="field-group">
+            <label class="field-label required">Cliente</label>
+            <input name="cliente" class="input" required placeholder="Nome do cliente">
+          </div>
+        </div>
+        <div class="form-grid form-grid-3" style="margin-bottom:16px">
+          <div class="field-group">
+            <label class="field-label">Base / Ambiente</label>
+            <input name="base" class="input" placeholder="Produção / Homologação">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Módulo</label>
+            <input name="modulo" class="input" placeholder="Ex: Financeiro">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Versão do Sistema</label>
+            <input name="versao" class="input" placeholder="Ex: 3.2.1">
+          </div>
+        </div>
+        <div class="form-grid form-grid-2" style="margin-bottom:16px">
+          <div class="field-group">
+            <label class="field-label required">Prioridade</label>
+            <select name="prioridade" class="input" required onchange="updateSLAPreview(this.value)">
+              <option value="">Selecione...</option>
+              <option value="baixa">▼ Baixa</option>
+              <option value="media">● Média</option>
+              <option value="alta">▲ Alta</option>
+              <option value="critica">🔴 Crítica</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Analista Responsável</label>
+            <select name="analista_id" class="input">
+              ${analistas.map(a=>`<option value="${a.id}" ${a.id===user?.id?'selected':''}>${a.nome} (${perfilLabel(a)})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div id="sla-preview" style="padding:10px 14px;background:var(--surface2);border-radius:var(--radius);font-size:13px;color:var(--text2);margin-bottom:16px;display:none">
+          ⏱ Prazo SLA: <span id="sla-preview-text" style="font-weight:600;color:var(--accent)"></span>
+        </div>
+        <div class="field-group" style="margin-bottom:16px">
+          <label class="field-label required">Descrição do Problema</label>
+          <textarea name="descricao" class="input" rows="4" required placeholder="Descreva detalhadamente o problema relatado pelo cliente..."></textarea>
+        </div>
+        <div class="field-group" style="margin-bottom:16px">
+          <label class="field-label">Passo a Passo para Reproduzir</label>
+          <div id="passos-list"></div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addPasso()" style="margin-top:8px">+ Adicionar passo</button>
+        </div>
+
+        <div class="field-group" style="margin-bottom:24px">
+          <label class="field-label">Evidências e Anexos</label>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Prints, vídeos, PDFs, logs — todos os tipos aceitos. Arrastar e soltar ou clicar para selecionar.</div>
+          <div class="upload-area" id="nc-upload-area"
+            onclick="document.getElementById('nc-file-input').click()"
+            ondragover="event.preventDefault();this.classList.add('drag')"
+            ondragleave="this.classList.remove('drag')"
+            ondrop="event.preventDefault();this.classList.remove('drag');handleNcFiles(event.dataTransfer.files)">
+            <div class="upload-icon">📎</div>
+            <div class="upload-text">Clique ou arraste os arquivos aqui</div>
+            <div class="upload-sub">Imagens · Vídeos · PDFs · Logs · Qualquer formato</div>
+            <input type="file" id="nc-file-input" style="display:none" multiple accept="*/*"
+              onchange="handleNcFiles(this.files)">
+          </div>
+          <div id="nc-files-list" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" onclick="Router.go('chamados')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Abrir Chamado</button>
+        </div>
+      </form>
+    </div>
+  `;
+  window._passos=[];
+  window._ncAnexos=[];
+});
+
+function addPasso() {
+  if(!window._passos) window._passos=[];
+  const n=window._passos.length+1;
+  window._passos.push('');
+  const list=document.getElementById('passos-list');
+  const row=document.createElement('div');
+  row.style.cssText='display:flex;gap:8px;margin-bottom:8px;align-items:center';
+  row.innerHTML=`
+    <span style="width:24px;height:24px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0">${n}</span>
+    <input class="input passo-input" data-idx="${n-1}" placeholder="Descreva o passo ${n}..." oninput="window._passos[${n-1}]=this.value">
+    <button type="button" onclick="this.parentNode.remove()" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:4px">✕</button>
+  `;
+  list.appendChild(row);
+}
+
+function updateSLAPreview(prio) {
+  const sla=DB.getSLA();
+  const h=sla[prio];
+  const prev=document.getElementById('sla-preview');
+  const txt=document.getElementById('sla-preview-text');
+  if(!prio||!h){prev.style.display='none';return;}
+  const prazo=new Date(Date.now()+h*3600000);
+  txt.textContent=`${h}h (até ${prazo.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})})`;
+  prev.style.display='block';
+}
+
+function handleNcFiles(fileList) {
+  if(!window._ncAnexos) window._ncAnexos=[];
+  const novos = Array.from(fileList);
+  novos.forEach(f => {
+    // evita duplicatas pelo nome+tamanho
+    if(window._ncAnexos.find(x=>x.nome===f.name&&x.tamanho===f.size)) return;
+    const cat = f.type.startsWith('image/') ? 'image'
+              : f.type.startsWith('video/') ? 'video'
+              : f.name.toLowerCase().includes('log') ? 'log' : 'doc';
+    window._ncAnexos.push({nome:f.name, categoria:cat, tipo:f.type, tamanho:f.size});
+  });
+  renderNcFiles();
+}
+
+function renderNcFiles() {
+  const list = document.getElementById('nc-files-list');
+  if(!list) return;
+  if(!window._ncAnexos?.length) { list.innerHTML=''; return; }
+  const icons = {image:'🖼️', video:'🎥', log:'📄', doc:'📁'};
+  list.innerHTML = window._ncAnexos.map((a,i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+      <span style="font-size:18px;flex-shrink:0">${icons[a.categoria]}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.nome}</span>
+      <span style="font-size:11px;color:var(--text3);flex-shrink:0">${a.tamanho ? Math.round(a.tamanho/1024)+'KB' : ''}</span>
+      <span class="badge ${a.categoria==='image'?'badge-blue':a.categoria==='video'?'badge-purple':a.categoria==='log'?'badge-amber':'badge-gray'}" style="flex-shrink:0">${a.categoria}</span>
+      <button type="button" onclick="window._ncAnexos.splice(${i},1);renderNcFiles()"
+        style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0"
+        title="Remover">✕</button>
+    </div>
+  `).join('');
+}
+
+function submitNovoChamado(e) {
+  e.preventDefault();
+  const form=new FormData(e.target);
+  const data={titulo:form.get('titulo'),cliente:form.get('cliente'),base:form.get('base'),modulo:form.get('modulo'),versao:form.get('versao'),descricao:form.get('descricao'),prioridade:form.get('prioridade'),analista_id:form.get('analista_id')};
+  const res=DB.createChamado(data);
+  if(res.ok) {
+    // Salvar anexos adicionados na abertura
+    if(window._ncAnexos?.length) {
+      window._ncAnexos.forEach(a => DB.adicionarAnexo(res.chamado.id, a));
+    }
+    // Salvar passos adicionados na abertura
+    const passos = Array.from(document.querySelectorAll('.passo-input')).map(i=>i.value.trim()).filter(Boolean);
+    passos.forEach(p => DB.adicionarPasso(res.chamado.id, p));
+    DB.addNotificacao(data.analista_id,`Novo chamado ${res.chamado.numero} atribuído a você: ${data.titulo}`,res.chamado.id);
+    toast(`Chamado ${res.chamado.numero} aberto com sucesso!`,'success');
+    updateBadgeAbertos();
+    window._ncAnexos=[];
+    Router.go('chamado',{id:res.chamado.id});
+  } else { toast('Erro ao abrir chamado','error'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DETALHE DO CHAMADO
+// ═══════════════════════════════════════════════════════════
+Router.register('chamado',(params)=>{
+  const c=DB.getChamado(params.id);
+  if(!c){toast('Chamado não encontrado','error');Router.go('chamados');return;}
+  const users=DB.getUsers();
+  const analista=users.find(u=>u.id===c.analista_id);
+  const user=DB.currentUser();
+  const statusFlow=['aberto','em_atendimento','aguardando_cliente','resolvido','encerrado'];
+  const nextStatus={aberto:'em_atendimento',em_atendimento:'aguardando_cliente',aguardando_cliente:'resolvido',resolvido:'encerrado'};
+  const nextLabel={aberto:'Iniciar Atendimento',em_atendimento:'Aguardar Cliente',aguardando_cliente:'Marcar Resolvido',resolvido:'Encerrar Chamado'};
+  const encerradoDentroPrazo=c.encerradoEm&&new Date(c.encerradoEm)<=new Date(c.prazoSLA);
+  const req=DB.verificarRequisitos(c.id);
+
+  document.getElementById('page').innerHTML=`
+    <div class="page-header" style="flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span class="mono" style="font-size:16px">${c.numero}</span>
+          ${prioBadge(c.prioridade)} ${statusBadge(c.status)}
+          ${c.encerradoEm?`<span class="badge ${encerradoDentroPrazo?'badge-green':'badge-red'}">${encerradoDentroPrazo?'✓ Dentro do prazo':'⚠ Fora do prazo'}</span>`:''}
+        </div>
+        <div class="page-title">${c.titulo}</div>
+        <div class="page-sub">Cliente: ${c.cliente} · Aberto em ${fmtDate(c.abertoEm)}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+        <button class="btn btn-ghost btn-sm" onclick="Router.go('chamados')">← Voltar</button>
+        ${!['encerrado','resolvido'].includes(c.status)&&nextStatus[c.status]?`<button class="btn btn-secondary btn-sm" onclick="avancarStatus('${c.id}','${nextStatus[c.status]}')">${nextLabel[c.status]}</button>`:''}
+        ${c.status!=='consultoria'&&!['encerrado','resolvido'].includes(c.status)?`<button class="btn btn-primary btn-sm" onclick="modalConsultoria('${c.id}')">→ Consultoria</button>`:''}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+      <!-- COL ESQUERDA -->
+      <div>
+        <!-- Info card -->
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;font-size:13px">
+            <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Analista</div><div style="font-weight:600">${analista?.nome||'—'}</div><div style="font-size:11px;color:var(--text3)">${analista?perfilLabel(analista):''}</div></div>
+            <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Base / Versão</div><div style="font-weight:600">${c.base||'—'}</div><div style="font-size:11px;color:var(--text3)">${c.versao||''}</div></div>
+            <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Prazo SLA</div><div style="font-weight:600">${fmtDate(c.prazoSLA)}</div><div>${slaInfo(c.prazoSLA,c.status)}</div></div>
+          </div>
+        </div>
+
+        <!-- Descrição -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="section-title" style="margin-bottom:12px">📋 Descrição do Problema</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.7">${c.descricao||'—'}</p>
+        </div>
+
+        <!-- Passo a passo -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="section-header">
+            <div class="section-title">🔢 Passo a Passo para Reproduzir</div>
+            ${!['encerrado','resolvido'].includes(c.status)?`<button class="btn btn-ghost btn-xs" onclick="modalAddPasso('${c.id}')">+ Adicionar</button>`:''}
+          </div>
+          ${c.passos&&c.passos.length?c.passos.map(p=>`
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)">
+              <span style="width:22px;height:22px;background:var(--surface2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;margin-top:1px">${p.ordem}</span>
+              <span style="font-size:13px">${p.descricao}</span>
+            </div>`).join(''):`<div style="color:var(--text3);font-size:13px;padding:12px 0">Nenhum passo informado.</div>`}
+        </div>
+
+        <!-- Anexos -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="section-header">
+            <div class="section-title">📎 Evidências e Anexos</div>
+            ${!['encerrado','resolvido'].includes(c.status)?`<button class="btn btn-ghost btn-xs" onclick="modalAnexo('${c.id}')">+ Anexar</button>`:''}
+          </div>
+          ${c.anexos&&c.anexos.length?`<div class="anexos-grid">${c.anexos.map(a=>
+            `<div class="anexo-item">
+              <div class="anexo-icon">${a.categoria==='image'?'🖼️':a.categoria==='video'?'🎥':a.tipo==='log'?'📄':'📁'}</div>
+              <div style="font-size:11px;word-break:break-all">${a.nome}</div>
+              <div style="font-size:10px;color:var(--text3)">${a.tamanho?(Math.round(a.tamanho/1024)+'KB'):'—'}</div>
+            </div>`).join('')}</div>`:
+            `<div style="color:var(--text3);font-size:13px;padding:12px 0">Nenhuma evidência anexada.</div>`}
+        </div>
+
+        <!-- Requisitos para consultoria -->
+        ${!['encerrado','resolvido','consultoria'].includes(c.status)?`
+        <div class="card" style="margin-bottom:16px;border-color:${req.ok?'rgba(34,197,94,.3)':'rgba(239,68,68,.2)'}">
+          <div class="section-title" style="margin-bottom:12px">${req.ok?'✅':'❌'} Requisitos para Envio à Consultoria</div>
+          <div class="req-list">
+            ${[
+              {ok:c.descricao&&c.descricao.length>=20,txt:'Descrição do problema preenchida'},
+              {ok:c.passos&&c.passos.length>0,txt:'Passo a passo informado'},
+              {ok:c.anexos&&c.anexos.length>0,txt:'Evidência anexada'},
+              {ok:c.anexos&&c.anexos.some(a=>['image','video'].includes(a.categoria)),txt:'Evidência visual (print ou vídeo)'},
+            ].map(r=>`<div class="req-item"><span class="${r.ok?'req-ok':'req-fail'}" style="font-size:16px">${r.ok?'✓':'✕'}</span><span style="font-size:13px">${r.txt}</span></div>`).join('')}
+          </div>
+        </div>`:''}
+      </div>
+
+      <!-- COL DIREITA: HISTÓRICO -->
+      <div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:16px">📜 Histórico do Chamado</div>
+          <div class="timeline">
+            ${c.historico.slice().reverse().map((h,i)=>{
+              const statusColors={aberto:'#4f8ef7',em_atendimento:'#a78bfa',aguardando_cliente:'#f59e0b',consultoria:'#06b6d4',resolvido:'#22c55e',encerrado:'#6b7280'};
+              const icons={aberto:'🔵',em_atendimento:'🟣',aguardando_cliente:'🟡',consultoria:'🔷',resolvido:'🟢',encerrado:'⚫'};
+              return `<div class="timeline-item">
+                ${i<c.historico.length-1?'<div class="timeline-line"></div>':''}
+                <div class="timeline-dot">${icons[h.status]||'●'}</div>
+                <div class="timeline-content">
+                  <div class="timeline-action">${h.acao}</div>
+                  <div class="timeline-meta">${h.usuario_nome||'Sistema'} · ${fmtDate(h.data)}</div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+          ${!['encerrado','resolvido'].includes(c.status)?`
+          <div class="divider"></div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Adicionar observação</div>
+          <textarea class="input" id="obs-text" rows="3" placeholder="Descreva uma observação..." style="margin-bottom:8px"></textarea>
+          <button class="btn btn-secondary btn-sm btn-block" onclick="addObservacao('${c.id}')">Registrar</button>`:''}
+        </div>
+      </div>
+    </div>
+  `;
+});
+
+function avancarStatus(cid,novoStatus) {
+  const res=DB.mudarStatus(cid,novoStatus);
+  if(res.ok) {
+    const c=res.chamado;
+    const analista=DB.getUsers().find(u=>u.id===c.analista_id);
+    if(analista) DB.addNotificacao(analista.id,`Chamado ${c.numero} — status alterado para: ${novoStatus.replace('_',' ')}`,cid);
+    toast('Status atualizado com sucesso','success');
+    updateBadgeAbertos();
+    Router.go('chamado',{id:cid});
+  }
+}
+
+function addObservacao(cid) {
+  const txt=document.getElementById('obs-text')?.value?.trim();
+  if(!txt){toast('Digite uma observação','warning');return;}
+  DB.updateChamado(cid,{},'Observação: '+txt);
+  toast('Observação registrada','success');
+  Router.go('chamado',{id:cid});
+}
+
+function modalAddPasso(cid) {
+  openModal(`
+    <div class="modal-header"><div class="modal-title">Adicionar Passo</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field-label">Descrição do Passo</label>
+        <textarea id="passo-input" class="input" rows="3" placeholder="Descreva o passo..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
+      <button class="btn btn-primary" onclick="savePasso('${cid}')">Salvar</button>
+    </div>
+  `);
+}
+function savePasso(cid) {
+  const txt=document.getElementById('passo-input')?.value?.trim();
+  if(!txt){toast('Digite a descrição','warning');return;}
+  DB.adicionarPasso(cid,txt); closeModals(); toast('Passo adicionado','success'); Router.go('chamado',{id:cid});
+}
+
+function modalAnexo(cid) {
+  openModal(`
+    <div class="modal-header"><div class="modal-title">Anexar Evidência</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
+    <div class="modal-body">
+      <div class="upload-area" onclick="document.getElementById('file-input').click()" id="upload-area">
+        <div class="upload-icon">📎</div>
+        <div class="upload-text">Clique para selecionar arquivo</div>
+        <div class="upload-sub">Imagens, PDFs, vídeos, logs — todos os tipos aceitos</div>
+        <input type="file" id="file-input" style="display:none" multiple accept="*/*" onchange="handleFileSelect(event,'${cid}')">
+      </div>
+      <div id="selected-files" style="margin-top:12px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-upload" onclick="saveAnexos('${cid}')" disabled>Anexar</button>
+    </div>
+  `);
+  window._pendingFiles=[];
+}
+
+function handleFileSelect(event, cid) {
+  window._pendingFiles=Array.from(event.target.files);
+  const div=document.getElementById('selected-files');
+  div.innerHTML=window._pendingFiles.map(f=>{
+    const cat=f.type.startsWith('image/')?'image':f.type.startsWith('video/')?'video':f.name.toLowerCase().includes('log')?'log':'doc';
+    const icons={image:'🖼️',video:'🎥',log:'📄',doc:'📁'};
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius);margin-bottom:6px;font-size:13px">
+      <span>${icons[cat]}</span><span style="flex:1">${f.name}</span><span style="color:var(--text3);font-size:11px">${Math.round(f.size/1024)}KB</span>
+    </div>`;
+  }).join('');
+  document.getElementById('btn-upload').disabled=window._pendingFiles.length===0;
+}
+
+function saveAnexos(cid) {
+  if(!window._pendingFiles?.length){toast('Selecione ao menos um arquivo','warning');return;}
+  window._pendingFiles.forEach(f=>{
+    const cat=f.type.startsWith('image/')?'image':f.type.startsWith('video/')?'video':f.name.toLowerCase().includes('log')?'log':'doc';
+    DB.adicionarAnexo(cid,{nome:f.name,categoria:cat,tipo:f.type,tamanho:f.size});
+  });
+  closeModals(); toast(`${window._pendingFiles.length} arquivo(s) anexado(s)`,'success'); Router.go('chamado',{id:cid});
+}
+
+function modalConsultoria(cid) {
+  const req=DB.verificarRequisitos(cid);
+  const consultores=DB.getUsers().filter(u=>u.perfil==='consultor'&&u.ativo);
+  openModal(`
+    <div class="modal-header"><div class="modal-title">Enviar para Consultoria</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
+    <div class="modal-body">
+      ${!req.ok?`<div style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);border-radius:var(--radius);padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:8px">⚠ Requisitos não cumpridos:</div>
+        ${req.erros.map(e=>`<div style="font-size:12px;color:var(--red);margin-top:4px">• ${e}</div>`).join('')}
+      </div>`:'<div style="background:var(--green-bg);border:1px solid rgba(34,197,94,.3);border-radius:var(--radius);padding:12px;margin-bottom:16px;font-size:13px;color:var(--green)">✓ Todos os requisitos cumpridos. O chamado pode ser enviado.</div>'}
+      <div class="field-group" style="margin-bottom:14px">
+        <label class="field-label">Consultor (opcional)</label>
+        <select class="input" id="consult-select">
+          <option value="">A ser definido</option>
+          ${consultores.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Observações para a Consultoria</label>
+        <textarea class="input" id="consult-obs" rows="4" placeholder="Descreva o que precisa da consultoria..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
+      <button class="btn btn-primary" ${!req.ok?'disabled':''} onclick="confirmarConsultoria('${cid}')">Enviar para Consultoria</button>
+    </div>
+  `,'520px');
+}
+
+function confirmarConsultoria(cid) {
+  const obs=document.getElementById('consult-obs')?.value;
+  const res=DB.enviarParaConsultoria(cid,obs);
+  if(res.ok){closeModals();toast('Chamado enviado para consultoria','success');Router.go('chamado',{id:cid});}
+  else{toast(res.erros?res.erros[0]:'Requisitos não cumpridos','error');}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RELATÓRIO SLA
+// ═══════════════════════════════════════════════════════════
+Router.register('sla',()=>{
+  // Estado persistente no escopo do router
+  if(!window._sla) window._sla = {
+    periodo: '30d',
+    de: '',
+    ate: '',
+    analista: '',
+  };
+  const S = window._sla;
+
+  function getPeriodo() {
+    const now = new Date();
+    const d = dt => { const x=new Date(now); x.setDate(x.getDate()-dt); x.setHours(0,0,0,0); return x; };
+    if(S.periodo==='7d')   return {de:d(7), ate:now};
+    if(S.periodo==='30d')  return {de:d(30), ate:now};
+    if(S.periodo==='tri')  return {de:d(90), ate:now};
+    if(S.periodo==='ano')  return {de:new Date(now.getFullYear(),0,1), ate:now};
+    if(S.periodo==='custom' && S.de && S.ate) return {de:new Date(S.de), ate:new Date(S.ate+'T23:59:59')};
+    return {de:d(30), ate:now};
+  }
+
+  function calcMetrics(chamados) {
+    const abertos  = chamados.filter(c=>!['encerrado','resolvido'].includes(c.status));
+    const encerrados = chamados.filter(c=>['encerrado','resolvido'].includes(c.status));
+    const dentroPrazo = encerrados.filter(c=>c.encerradoEm&&new Date(c.encerradoEm)<=new Date(c.prazoSLA));
+    const foraPrazo   = encerrados.filter(c=>c.encerradoEm&&new Date(c.encerradoEm)>new Date(c.prazoSLA));
+    const vencidos    = abertos.filter(c=>new Date(c.prazoSLA)<new Date());
+    const taxaSLA = encerrados.length ? Math.round(dentroPrazo.length/encerrados.length*100) : 0;
+    const tempos  = encerrados.filter(c=>c.encerradoEm).map(c=>(new Date(c.encerradoEm)-new Date(c.abertoEm))/3600000);
+    const tempoMedio = tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : 0;
+    const vencendo = abertos.filter(c=>{const d=new Date(c.prazoSLA)-new Date();return d>0&&d<7200000;});
+    return {total:chamados.length, abertos, encerrados, dentroPrazo, foraPrazo, vencidos, taxaSLA, tempoMedio, vencendo};
+  }
+
+  function renderSLA() {
+    const p = getPeriodo();
+    const users = DB.getUsers();
+    let todos = DB.getChamados().filter(c=>new Date(c.abertoEm)>=p.de&&new Date(c.abertoEm)<=p.ate);
+    // Filtro por analista
+    if(S.analista) todos = todos.filter(c=>c.analista_id===S.analista);
+    const m = calcMetrics(todos);
+
+    // Ranking por analista (sempre todos no período, sem filtro de analista individual)
+    const periodoTodos = DB.getChamados().filter(c=>new Date(c.abertoEm)>=p.de&&new Date(c.abertoEm)<=p.ate);
+    const ranking = users.filter(u=>['analista','admin'].includes(u.perfil)).map(u=>{
+      const cha = periodoTodos.filter(c=>c.analista_id===u.id);
+      const enc = cha.filter(c=>['encerrado','resolvido'].includes(c.status));
+      const dp  = enc.filter(c=>c.encerradoEm&&new Date(c.encerradoEm)<=new Date(c.prazoSLA));
+      return {...u, total:cha.length, abertos:cha.filter(c=>!['encerrado','resolvido'].includes(c.status)).length, encerrados:enc.length, dentroPrazo:dp.length, taxa:enc.length?Math.round(dp.length/enc.length*100):null};
+    }).filter(u=>u.total>0).sort((a,b)=>(b.taxa??-1)-(a.taxa??-1));
+
+    // Dados por mês (últimos 6 meses — sempre sem filtro de analista)
+    const meses=[]; const now=new Date();
+    for(let i=5;i>=0;i--){
+      const ini=new Date(now.getFullYear(),now.getMonth()-i,1);
+      const fim=new Date(now.getFullYear(),now.getMonth()-i+1,0,23,59,59);
+      const mc=DB.getChamados().filter(c=>new Date(c.abertoEm)>=ini&&new Date(c.abertoEm)<=fim);
+      const mm=calcMetrics(mc);
+      meses.push({label:ini.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}),total:mc.length,dentro:mm.dentroPrazo.length,fora:mm.foraPrazo.length,abertos:mm.abertos.length,taxa:mm.taxaSLA});
+    }
+
+    const periodoLabels = {'7d':'Últimos 7 dias','30d':'Últimos 30 dias','tri':'Últimos 90 dias','ano':'Este ano','custom':'Personalizado'};
+
+    document.getElementById('page').innerHTML=`
+      <div class="page-header">
+        <div><div class="page-title">Relatório de SLA</div>
+          <div class="page-sub">Período: ${periodoLabels[S.periodo]}${S.analista?' · '+users.find(u=>u.id===S.analista)?.nome:''}</div>
+        </div>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Período</div>
+            <div class="period-filter">
+              ${[['7d','7 dias'],['30d','30 dias'],['tri','90 dias'],['ano','Este ano'],['custom','Personalizado']].map(([v,l])=>`
+                <button class="period-btn ${S.periodo===v?'active':''}" data-p="${v}" onclick="window._sla.periodo='${v}';document.querySelectorAll('[data-p]').forEach(b=>b.classList.toggle('active',b.dataset.p==='${v}'));document.getElementById('sla-custom-range').style.display='${v==='custom'?'flex':'none'}';renderSLA()">${l}</button>`).join('')}
+            </div>
+          </div>
+          <div id="sla-custom-range" style="display:${S.periodo==='custom'?'flex':'none'};align-items:center;gap:8px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">De</div>
+              <input type="date" class="input" style="width:150px" value="${S.de}" onchange="window._sla.de=this.value;if(window._sla.ate)renderSLA()">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Até</div>
+              <input type="date" class="input" style="width:150px" value="${S.ate}" onchange="window._sla.ate=this.value;if(window._sla.de)renderSLA()">
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Analista</div>
+            <select class="input" style="min-width:200px" onchange="window._sla.analista=this.value;renderSLA()">
+              <option value="">Todos os analistas</option>
+              ${users.filter(u=>['analista','admin'].includes(u.perfil)).map(u=>`<option value="${u.id}" ${S.analista===u.id?'selected':''}>${u.nome} (${perfilLabel(u)})</option>`).join('')}
+            </select>
+          </div>
+          ${S.analista||S.periodo!=='30d'?`<button class="btn btn-ghost btn-sm" onclick="window._sla={periodo:'30d',de:'',ate:'',analista:''};renderSLA()">✕ Limpar filtros</button>`:''}
+        </div>
+      </div>
+
+      <!-- CARDS MÉTRICAS -->
+      <div class="stats-grid" style="margin-bottom:20px">
+        <div class="stat-card stat-blue"><div class="stat-icon">🎫</div><div class="stat-val">${m.total}</div><div class="stat-label">Total no Período</div></div>
+        <div class="stat-card stat-amber"><div class="stat-icon">🔵</div><div class="stat-val">${m.abertos.length}</div><div class="stat-label">Em Aberto</div></div>
+        <div class="stat-card stat-cyan"><div class="stat-icon">✔️</div><div class="stat-val">${m.encerrados.length}</div><div class="stat-label">Encerrados</div></div>
+        <div class="stat-card stat-green"><div class="stat-icon">✅</div><div class="stat-val">${m.dentroPrazo.length}</div><div class="stat-label">Encerrados no Prazo</div></div>
+        <div class="stat-card stat-red"><div class="stat-icon">❌</div><div class="stat-val">${m.foraPrazo.length}</div><div class="stat-label">Encerrados Fora do Prazo</div></div>
+        <div class="stat-card ${m.taxaSLA>=80?'stat-green':m.taxaSLA>=50?'stat-amber':'stat-red'}">
+          <div class="stat-icon">📈</div><div class="stat-val">${m.taxaSLA}%</div><div class="stat-label">Taxa de Cumprimento SLA</div>
+          <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${m.taxaSLA}%;background:${m.taxaSLA>=80?'var(--green)':m.taxaSLA>=50?'var(--amber)':'var(--red)'}"></div></div>
+        </div>
+        <div class="stat-card stat-purple"><div class="stat-icon">⏱</div><div class="stat-val">${m.tempoMedio}h</div><div class="stat-label">Tempo Médio Atendimento</div></div>
+        <div class="stat-card stat-red"><div class="stat-icon">⚠️</div><div class="stat-val">${m.vencidos.length}</div><div class="stat-label">SLA Vencido (em aberto)</div></div>
+        <div class="stat-card stat-amber"><div class="stat-icon">🔔</div><div class="stat-val">${m.vencendo.length}</div><div class="stat-label">Vencendo em &lt;2h</div></div>
+      </div>
+
+      <!-- GRÁFICOS -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+        <div class="card">
+          <div class="section-title" style="margin-bottom:4px">Chamados por mês — últimos 6 meses</div>
+          <div style="display:flex;gap:16px;font-size:11px;color:var(--text2);margin-bottom:12px">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#22c55e;display:inline-block"></span>Dentro do prazo</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#ef4444;display:inline-block"></span>Fora do prazo</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#4f8ef7;display:inline-block"></span>Em aberto</span>
+          </div>
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-barras" role="img" aria-label="Chamados por mês"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:4px">Distribuição SLA — período selecionado</div>
+          <div style="display:flex;gap:16px;font-size:11px;color:var(--text2);margin-bottom:12px">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#22c55e;display:inline-block"></span>Dentro do prazo</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#ef4444;display:inline-block"></span>Fora do prazo</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#4f8ef7;display:inline-block"></span>Em aberto</span>
+          </div>
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-pizza" role="img" aria-label="Distribuição SLA"></canvas></div>
+        </div>
+      </div>
+
+      <!-- RANKING -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="section-title" style="margin-bottom:14px">🏆 Ranking de Analistas por SLA</div>
+        ${ranking.length?ranking.map((u,i)=>{
+          const pos=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+          return `<div class="rank-item">
+            <div class="rank-pos ${pos}">${i+1}</div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600">${u.nome}</div>
+              <div style="font-size:11px;color:var(--text2)">${perfilLabel(u)} · ${u.total} total · ${u.abertos} abertos · ${u.encerrados} encerrados</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:16px;font-weight:700;color:${u.taxa>=80?'var(--green)':u.taxa>=50?'var(--amber)':'var(--red)'}">${u.taxa!==null?u.taxa+'%':'—'}</div>
+              <div style="font-size:11px;color:var(--text2)">${u.dentroPrazo}/${u.encerrados} no prazo</div>
+            </div>
+            <div style="width:80px">
+              <div class="progress-bar"><div class="progress-fill" style="width:${u.taxa||0}%;background:${u.taxa>=80?'var(--green)':u.taxa>=50?'var(--amber)':'var(--red)'}"></div></div>
+            </div>
+          </div>`;
+        }).join(''):`<div style="color:var(--text3);font-size:13px;padding:16px 0;text-align:center">Nenhum dado no período</div>`}
+      </div>
+
+      <!-- TABELA FORA DO PRAZO -->
+      <div class="card">
+        <div class="section-header" style="margin-bottom:14px">
+          <div class="section-title">⚠️ Chamados Encerrados Fora do Prazo</div>
+          <span class="badge badge-red">${m.foraPrazo.length}</span>
+        </div>
+        <div class="table-wrap" style="border:none;background:transparent">
+          <table class="data-table" style="background:transparent">
+            <thead><tr><th>Número</th><th>Cliente</th><th>Prioridade</th><th>SLA Previsto</th><th>Encerrado em</th><th>Atraso</th><th>Analista</th></tr></thead>
+            <tbody>
+              ${m.foraPrazo.length?m.foraPrazo.slice(0,30).map(c=>{
+                const an=users.find(u=>u.id===c.analista_id);
+                const atraso=Math.round((new Date(c.encerradoEm)-new Date(c.prazoSLA))/3600000);
+                return `<tr onclick="Router.go('chamado',{id:'${c.id}'})">
+                  <td><span class="mono">${c.numero}</span></td>
+                  <td style="font-size:12px">${c.cliente}</td>
+                  <td>${prioBadge(c.prioridade)}</td>
+                  <td style="font-size:12px">${fmtDate(c.prazoSLA)}</td>
+                  <td style="font-size:12px">${fmtDate(c.encerradoEm)}</td>
+                  <td><span class="badge badge-red">+${atraso}h</span></td>
+                  <td style="font-size:12px">${an?.nome||'—'}</td>
+                </tr>`;
+              }).join(''):'<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">Nenhum chamado fora do prazo 🎉</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    // Chart barras (MiniChart — sem dependência externa)
+    const ctxBar=document.getElementById('chart-barras');
+    if(ctxBar){
+      MiniChart.bar(ctxBar,
+        meses.map(m=>m.label),
+        [
+          {label:'Dentro do prazo',data:meses.map(m=>m.dentro),backgroundColor:'rgba(34,197,94,.8)'},
+          {label:'Fora do prazo',data:meses.map(m=>m.fora),backgroundColor:'rgba(239,68,68,.8)'},
+          {label:'Em aberto',data:meses.map(m=>m.abertos),backgroundColor:'rgba(79,142,247,.6)'},
+        ]
+      );
+    }
+    // Chart pizza (MiniChart)
+    const ctxPie=document.getElementById('chart-pizza');
+    if(ctxPie){
+      MiniChart.donut(ctxPie,
+        ['No prazo','Fora prazo','Aberto'],
+        [m.dentroPrazo.length, m.foraPrazo.length, m.abertos.length],
+        ['rgba(34,197,94,.9)','rgba(239,68,68,.9)','rgba(79,142,247,.8)']
+      );
+    }
+
+    window.renderSLA = renderSLA;
+  }
+
+  renderSLA();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  USUÁRIOS / ANALISTAS
+// ═══════════════════════════════════════════════════════════
+Router.register('usuarios',()=>{
+  const user=DB.currentUser();
+  if(user?.perfil!=='admin'){toast('Acesso restrito','error');Router.go('dashboard');return;}
+  function render() {
+    const users=DB.getUsers();
+    document.getElementById('page').innerHTML=`
+      <div class="page-header">
+        <div><div class="page-title">Analistas e Usuários</div><div class="page-sub">${users.length} usuário(s) cadastrado(s)</div></div>
+        <button class="btn btn-primary" onclick="modalCriarUsuario()">+ Novo Usuário</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th></th></tr></thead>
+          <tbody>
+            ${users.map(u=>`<tr>
+              <td>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div class="avatar" style="width:30px;height:30px;font-size:11px;flex-shrink:0">${u.nome.split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
+                  <span style="font-weight:500">${u.nome}</span>
+                </div>
+              </td>
+              <td style="font-size:12px;color:var(--text2)">${u.email}</td>
+              <td>${u.perfil==='admin'?'<span class="badge badge-purple">👑 ADM</span>':u.perfil==='consultor'?'<span class="badge badge-cyan">🎯 Consultor</span>':`<span class="badge badge-blue">🔧 Analista N${u.nivel}</span>`}</td>
+              <td><span class="badge ${u.ativo?'badge-green':'badge-gray'}">${u.ativo?'✓ Ativo':'✕ Inativo'}</span></td>
+              <td style="font-size:12px;color:var(--text2)">${fmtDateShort(u.criadoEm)}</td>
+              <td>
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-ghost btn-xs" onclick="modalEditarUsuario('${u.id}')">Editar</button>
+                  ${u.id!=='usr_admin'?`<button class="btn btn-ghost btn-xs" style="color:var(--${u.ativo?'red':'green'})" onclick="toggleAtivo('${u.id}',${!u.ativo})">${u.ativo?'Desativar':'Ativar'}</button>`:''}
+                </div>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    window.renderUsuarios=render;
+  }
+  render();
+});
+
+function modalCriarUsuario() {
+  openModal(`
+    <div class="modal-header"><div class="modal-title">Novo Usuário</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid" style="gap:14px">
+        <div class="field-group"><label class="field-label required">Nome completo</label><input id="u-nome" class="input" placeholder="Nome do usuário"></div>
+        <div class="field-group"><label class="field-label required">E-mail</label><input id="u-email" class="input" type="email" placeholder="email@empresa.com.br"></div>
+        <div class="form-grid form-grid-2" style="gap:14px">
+          <div class="field-group">
+            <label class="field-label required">Perfil</label>
+            <select id="u-perfil" class="input" onchange="toggleNivelField(this.value)">
+              <option value="analista">🔧 Analista</option>
+              <option value="consultor">🎯 Consultor</option>
+              <option value="admin">👑 Administrador</option>
+            </select>
+          </div>
+          <div class="field-group" id="nivel-field">
+            <label class="field-label required">Nível</label>
+            <select id="u-nivel" class="input">
+              <option value="1">Nível 1</option>
+              <option value="2">Nível 2</option>
+              <option value="3">Nível 3</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group"><label class="field-label required">Senha inicial</label><input id="u-senha" class="input" type="password" placeholder="Mínimo 8 caracteres" minlength="8"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarNovoUsuario()">Criar Usuário</button>
+    </div>
+  `);
+}
+
+function toggleNivelField(perfil) {
+  const f=document.getElementById('nivel-field');
+  if(f) f.style.display=perfil==='analista'?'block':'none';
+}
+
+function salvarNovoUsuario() {
+  const nome=document.getElementById('u-nome')?.value?.trim();
+  const email=document.getElementById('u-email')?.value?.trim();
+  const perfil=document.getElementById('u-perfil')?.value;
+  const nivel=document.getElementById('u-nivel')?.value;
+  const senha=document.getElementById('u-senha')?.value;
+  if(!nome||!email||!senha){toast('Preencha todos os campos','warning');return;}
+  if(senha.length<8){toast('Senha deve ter mínimo 8 caracteres','warning');return;}
+  const res=DB.createUser({nome,email,perfil,nivel:perfil==='analista'?parseInt(nivel):null,password:senha});
+  if(res.ok){closeModals();toast('Usuário criado com sucesso','success');if(window.renderUsuarios)window.renderUsuarios();}
+  else toast(res.msg,'error');
+}
+
+function modalEditarUsuario(id) {
+  const u=DB.getUsers().find(x=>x.id===id); if(!u) return;
+  openModal(`
+    <div class="modal-header"><div class="modal-title">Editar Usuário</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid" style="gap:14px">
+        <div class="field-group"><label class="field-label">Nome</label><input id="eu-nome" class="input" value="${u.nome}"></div>
+        <div class="form-grid form-grid-2" style="gap:14px">
+          <div class="field-group">
+            <label class="field-label">Perfil</label>
+            <select id="eu-perfil" class="input" onchange="toggleNivelEdit(this.value)">
+              ${['analista','consultor','admin'].map(p=>`<option value="${p}" ${u.perfil===p?'selected':''}>${p}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-group" id="nivel-edit" style="display:${u.perfil==='analista'?'block':'none'}">
+            <label class="field-label">Nível</label>
+            <select id="eu-nivel" class="input">
+              ${[1,2,3].map(n=>`<option value="${n}" ${u.nivel===n?'selected':''}>${n}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="field-group"><label class="field-label">Nova senha (deixe vazio para manter)</label><input id="eu-senha" class="input" type="password" placeholder="Nova senha..."></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarEdicaoUsuario('${id}')">Salvar</button>
+    </div>
+  `);
+}
+function toggleNivelEdit(p){const f=document.getElementById('nivel-edit');if(f)f.style.display=p==='analista'?'block':'none';}
+function salvarEdicaoUsuario(id) {
+  const nome=document.getElementById('eu-nome')?.value?.trim();
+  const perfil=document.getElementById('eu-perfil')?.value;
+  const nivel=document.getElementById('eu-nivel')?.value;
+  const senha=document.getElementById('eu-senha')?.value;
+  DB.updateUser(id,{nome,perfil,nivel:perfil==='analista'?parseInt(nivel):null});
+  if(senha&&senha.length>=8) DB.changePassword(id,senha);
+  closeModals(); toast('Usuário atualizado','success'); if(window.renderUsuarios)window.renderUsuarios();
+}
+function toggleAtivo(id,ativo) {
+  DB.updateUser(id,{ativo}); toast(ativo?'Usuário ativado':'Usuário desativado',ativo?'success':'warning');
+  if(window.renderUsuarios)window.renderUsuarios();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CONFIGURAÇÕES
+// ═══════════════════════════════════════════════════════════
+Router.register('config',()=>{
+  const user=DB.currentUser();
+  if(user?.perfil!=='admin'){toast('Acesso restrito','error');Router.go('dashboard');return;}
+  const sla=DB.getSLA(); const smtp=DB.getSMTP();
+  document.getElementById('page').innerHTML=`
+    <div class="page-header">
+      <div><div class="page-title">Configurações</div><div class="page-sub">SLA, e-mail e integrações</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:900px">
+      <!-- SLA -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:16px">⏱ Configuração de SLA</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Defina o prazo em horas para cada nível de prioridade.</div>
+        <form onsubmit="salvarSLA(event)">
+          ${['baixa','media','alta','critica'].map(p=>{
+            const labels={baixa:'▼ Baixa',media:'● Média',alta:'▲ Alta',critica:'🔴 Crítica'};
+            const colors={baixa:'var(--green)',media:'var(--amber)',alta:'var(--red)',critica:'var(--red)'};
+            return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+              <span style="width:80px;font-size:13px;color:${colors[p]};font-weight:600">${labels[p]}</span>
+              <input name="${p}" type="number" class="input" min="1" max="720" value="${sla[p]}" style="width:80px">
+              <span style="font-size:12px;color:var(--text2)">horas</span>
+            </div>`;
+          }).join('')}
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-top:8px">Salvar SLA</button>
+        </form>
+      </div>
+
+      <!-- SMTP -->
+      <div class="card">
+        <div class="section-title" style="margin-bottom:4px">📧 Configuração de E-mail (EmailJS)</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Configure o serviço para envio de notificações por e-mail.<br>Acesse <a href="https://emailjs.com" target="_blank">emailjs.com</a> para obter as credenciais.</div>
+        <form onsubmit="salvarSMTP(event)">
+          <div class="form-grid" style="gap:10px">
+            <div class="field-group"><label class="field-label">Service ID</label><input name="serviceId" class="input" value="${smtp.serviceId||''}" placeholder="Ex: service_abc123"></div>
+            <div class="field-group"><label class="field-label">Template ID</label><input name="templateId" class="input" value="${smtp.templateId||''}" placeholder="Ex: template_xyz"></div>
+            <div class="field-group"><label class="field-label">Public Key</label><input name="publicKey" class="input" value="${smtp.publicKey||''}" placeholder="Ex: A1B2C3D4E5..."></div>
+            <div class="field-group"><label class="field-label">E-mail do remetente</label><input name="fromEmail" class="input" type="email" value="${smtp.fromEmail||'suporte@pgmbox.com.br'}"></div>
+            <div class="field-group"><label class="field-label">Nome do remetente</label><input name="fromName" class="input" value="${smtp.fromName||'PGMBox Suporte'}"></div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="margin-top:12px">Salvar Configurações</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- TEMPLATE EMAILJS -->
+    <div class="card" style="max-width:900px;margin-top:20px">
+      <div class="section-title" style="margin-bottom:10px">📋 Template EmailJS sugerido</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Crie um template no EmailJS com as variáveis abaixo. O campo "To email" deve usar <code style="background:var(--surface2);padding:2px 6px;border-radius:4px">{{to_email}}</code>.</div>
+      <pre style="background:var(--surface2);padding:16px;border-radius:var(--radius);font-size:12px;font-family:var(--mono);color:var(--text2);overflow-x:auto;white-space:pre-wrap">Assunto: {{subject}}
+
+Olá {{to_name}},
+
+{{mensagem}}
+
+---
+Chamado: {{numero}}
+Título: {{titulo}}
+Status: {{status}}
+Prazo SLA: {{prazo}}
+
+PGMBox Suporte — {{from_name}}</pre>
+    </div>
+
+    <!-- LOG DE E-MAILS -->
+    <div class="card" style="max-width:900px;margin-top:20px">
+      <div class="section-title" style="margin-bottom:14px">📊 Log de E-mails</div>
+      ${(()=>{const logs=JSON.parse(localStorage.getItem('pgmbox_email_log')||'[]').slice(0,10);
+        return logs.length?`<div class="table-wrap" style="border:none;background:transparent"><table class="data-table" style="background:transparent"><thead><tr><th>Data</th><th>Para</th><th>Assunto</th><th>Status</th></tr></thead><tbody>${logs.map(l=>`<tr><td style="font-size:11px">${fmtDate(l.data)}</td><td style="font-size:12px">${l.para}</td><td style="font-size:12px">${l.assunto}</td><td><span class="badge ${l.status==='enviado'?'badge-green':l.status==='simulado'?'badge-amber':'badge-red'}">${l.status}</span></td></tr>`).join('')}</tbody></table></div>`:
+        '<div style="color:var(--text3);font-size:13px;padding:12px 0">Nenhum e-mail enviado ainda.</div>'})()}
+    </div>
+  `;
+});
+
+function salvarSLA(e) {
+  e.preventDefault();
+  const form=new FormData(e.target);
+  DB.setSLA({baixa:parseInt(form.get('baixa')),media:parseInt(form.get('media')),alta:parseInt(form.get('alta')),critica:parseInt(form.get('critica'))});
+  toast('SLA atualizado com sucesso','success');
+}
+function salvarSMTP(e) {
+  e.preventDefault();
+  const form=new FormData(e.target);
+  DB.setSMTP({serviceId:form.get('serviceId'),templateId:form.get('templateId'),publicKey:form.get('publicKey'),fromEmail:form.get('fromEmail'),fromName:form.get('fromName')});
+  toast('Configurações de e-mail salvas','success');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILA DE E-MAILS (Email-to-Ticket)
+// ═══════════════════════════════════════════════════════════
+
+// Helpers de fila
+const FilaDB = {
+  get: () => { try{return JSON.parse(localStorage.getItem('pgmbox_fila')||'[]')}catch{return[]} },
+  save: (d) => localStorage.setItem('pgmbox_fila', JSON.stringify(d)),
+  add: (item) => {
+    const fila = FilaDB.get();
+    fila.unshift({id:'fila_'+Date.now(), ...item, chegadaEm: new Date().toISOString(), status:'pendente'});
+    FilaDB.save(fila);
+    updateBadgeFila();
+    return fila[0];
+  },
+  update: (id, fields) => {
+    const fila = FilaDB.get();
+    const idx = fila.findIndex(f=>f.id===id);
+    if(idx!==-1){ fila[idx]={...fila[idx],...fields}; FilaDB.save(fila); }
+  },
+  remove: (id) => { FilaDB.save(FilaDB.get().filter(f=>f.id!==id)); updateBadgeFila(); }
+};
+
+function updateBadgeFila() {
+  const badge = document.getElementById('badge-fila');
+  if(!badge) return;
+  const count = FilaDB.get().filter(f=>f.status==='pendente').length;
+  badge.textContent = count; badge.style.display = count ? 'inline' : 'none';
+}
+
+// ── Simular recebimento de e-mail ────────────────────────
+function simularEmailRecebido() {
+  const exemplos = [
+    {remetente:'joao.silva@prefeitura.campinas.sp.gov.br', nome:'João Silva', assunto:'Sistema não abre após atualização', corpo:'Bom dia,\n\nDesde ontem após a atualização do sistema, o módulo financeiro não carrega mais. Aparece uma tela branca e depois o erro "Falha ao carregar módulo".\n\nUso o sistema todos os dias e preciso de ajuda urgente.\n\nAtenciosamente,\nJoão Silva\nPrefeitura de Campinas'},
+    {remetente:'ti@camarasp.leg.br', nome:'TI Câmara SP', assunto:'URGENTE - Relatório de prestação de contas com erro', corpo:'Olá,\n\nPrecisamos de suporte URGENTE. O relatório de prestação de contas está gerando valores incorretos. Temos prazo de entrega amanhã.\n\nO erro ocorre ao filtrar por período "Mensal".\n\nAguardo retorno.\nEquipe de TI - Câmara Municipal de SP'},
+    {remetente:'ana.costa@sefazpe.gov.br', nome:'Ana Costa', assunto:'Dúvida sobre exportação de dados', corpo:'Boa tarde,\n\nGostaria de saber como exportar os dados do sistema para Excel. Não estou encontrando essa opção no menu.\n\nObrigada,\nAna Costa\nSEFAZ-PE'},
+  ];
+  const ex = exemplos[Math.floor(Math.random()*exemplos.length)];
+  const item = FilaDB.add({
+    ...ex,
+    origem: 'email',
+    prioridadeSugerida: ex.assunto.toLowerCase().includes('urgente') ? 'alta' : 'media',
+    clienteSugerido: ex.nome.split(' ').slice(-1)[0] || ex.remetente.split('@')[1]
+  });
+  toast(`📨 Novo e-mail recebido de ${ex.nome}`, 'info');
+  updateBadgeFila();
+  if(document.querySelector('[data-nav="fila"]')?.classList.contains('active')) Router.go('fila');
+}
+
+// ── Rota do backlog ───────────────────────────────────────
+Router.register('fila', () => {
+  const fila = FilaDB.get();
+  const pendentes = fila.filter(f=>f.status==='pendente');
+  const processados = fila.filter(f=>f.status!=='pendente');
+  const analistas = DB.getUsers().filter(u=>['analista','admin'].includes(u.perfil)&&u.ativo);
+  const user = DB.currentUser();
+  // Chamados do histórico visíveis apenas ao analista alocado (ou admin vê todos)
+  const processadosVisiveis = user.perfil === 'admin'
+    ? processados
+    : processados.filter(f => f.analista_id === user.id || !f.analista_id);
+
+  document.getElementById('page').innerHTML = `
+    <div class="page-header">
+      <div>
+        <div class="page-title">📥 Backlog — Ag. Recategorização</div>
+        <div class="page-sub">${pendentes.length} item(s) na fila · visível para todos os usuários · chamados alocados ficam apenas na fila do analista responsável</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-secondary" onclick="simularEmailRecebido()">📨 Simular e-mail recebido</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--text3)" onclick="mostrarInfoWebhook()">Como integrar e-mail real →</button>
+      </div>
+    </div>
+
+    ${pendentes.length === 0 ? `
+    <div class="card" style="text-align:center;padding:60px 20px">
+      <div style="font-size:52px;margin-bottom:12px;opacity:.35">📭</div>
+      <div style="font-size:16px;font-weight:600;color:var(--text2)">Backlog vazio</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:6px">Nenhum item aguardando recategorização</div>
+      <button class="btn btn-secondary btn-sm" style="margin-top:18px" onclick="simularEmailRecebido()">Simular recebimento de e-mail</button>
+    </div>
+    ` : `
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <span class="badge badge-amber" style="font-size:12px;padding:5px 14px">${pendentes.length} aguardando</span>
+      <span style="font-size:12px;color:var(--text2)">Qualquer analista pode categorizar — após criar o chamado, ele fica visível somente para o analista alocado.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px">
+      ${pendentes.map(item => `
+        <div class="card" style="border-left:3px solid var(--accent)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+                <span class="badge badge-blue">📨 E-mail</span>
+                <span style="font-size:11px;color:var(--text3)">${fmtDate(item.chegadaEm)}</span>
+                <span style="font-size:11px;color:var(--text3)">·</span>
+                <span style="font-size:12px;font-weight:700;color:${corDuracao(item.chegadaEm)}">⏳ ${fmtDuracao(item.chegadaEm)} na fila</span>
+                <span class="badge badge-amber" style="font-size:10px">SLA pausado</span>
+              </div>
+              <div style="font-size:15px;font-weight:600;margin-bottom:4px">${item.assunto}</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:10px">De: <strong>${item.nome}</strong> &lt;${item.remetente}&gt;</div>
+              <div style="font-size:13px;color:var(--text2);background:var(--surface2);padding:12px;border-radius:var(--radius);white-space:pre-line;max-height:100px;overflow:hidden;position:relative">
+                ${item.corpo}
+                <div style="position:absolute;bottom:0;left:0;right:0;height:30px;background:linear-gradient(transparent,var(--surface2))"></div>
+              </div>
+            </div>
+            <div style="min-width:250px;background:var(--surface2);border-radius:var(--radius);padding:16px">
+              <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px">🏷️ Categorizar como chamado</div>
+              <div class="field-group" style="margin-bottom:10px">
+                <label class="field-label" style="font-size:10px">Título do chamado</label>
+                <input class="input" id="titulo-${item.id}" value="${item.assunto}" style="font-size:12px">
+              </div>
+              <div class="field-group" style="margin-bottom:10px">
+                <label class="field-label" style="font-size:10px">Cliente</label>
+                <input class="input" id="cliente-${item.id}" value="${item.clienteSugerido||item.nome}" style="font-size:12px">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                <div class="field-group">
+                  <label class="field-label" style="font-size:10px">Prioridade</label>
+                  <select class="input" id="prio-${item.id}" style="font-size:12px">
+                    <option value="baixa">▼ Baixa</option>
+                    <option value="media" ${item.prioridadeSugerida==='media'?'selected':''}>● Média</option>
+                    <option value="alta" ${item.prioridadeSugerida==='alta'?'selected':''}>▲ Alta</option>
+                    <option value="critica">🔴 Crítica</option>
+                  </select>
+                </div>
+                <div class="field-group">
+                  <label class="field-label" style="font-size:10px">Alocar para</label>
+                  <select class="input" id="anal-${item.id}" style="font-size:12px">
+                    ${analistas.map(a=>`<option value="${a.id}" ${a.id===user.id?'selected':''}>${a.nome.split(' ')[0]} (${a.perfil==='admin'?'ADM':'N'+a.nivel})</option>`).join('')}
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
+                ℹ️ Após criar, o chamado ficará visível <strong>somente</strong> para o analista alocado.
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-primary btn-sm" style="flex:1" onclick="converterEmChamado('${item.id}')">✓ Criar chamado</button>
+                <button class="btn btn-danger btn-sm" onclick="descartarEmail('${item.id}')" title="Descartar e-mail">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    `}
+
+    ${processadosVisiveis.length ? `
+    <div class="section-header" style="margin-top:8px">
+      <div class="section-title" style="font-size:14px;color:var(--text2)">
+        Histórico — processados
+        ${user.perfil !== 'admin' ? '<span style="font-size:11px;color:var(--text3);font-weight:400;margin-left:6px">(somente os seus)</span>' : ''}
+      </div>
+      <span class="badge badge-gray">${processadosVisiveis.length}</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Remetente</th><th>Assunto</th><th>Recebido</th><th>Analista alocado</th><th>Status</th><th>Chamado gerado</th></tr></thead>
+        <tbody>
+          ${processadosVisiveis.slice(0,20).map(item => {
+            const an = DB.getUsers().find(u=>u.id===item.analista_id);
+            return `<tr>
+              <td style="font-size:12px">${item.nome}<br><span style="color:var(--text3);font-size:11px">${item.remetente}</span></td>
+              <td style="font-size:13px;max-width:180px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.assunto}</div></td>
+              <td style="font-size:12px;color:var(--text2)">${fmtDate(item.chegadaEm)}</td>
+              <td style="font-size:12px">${an?.nome||'—'}</td>
+              <td><span class="badge ${item.status==='convertido'?'badge-green':'badge-gray'}">${item.status==='convertido'?'✓ Convertido':'✕ Descartado'}</span></td>
+              <td>${item.chamadoNumero?`<span class="mono" style="cursor:pointer;color:var(--accent)" onclick="Router.go('chamado',{id:'${item.chamadoId}'})">${item.chamadoNumero}</span>`:'—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+  `;
+});
+
+function converterEmChamado(filaId) {
+  const item = FilaDB.get().find(f=>f.id===filaId);
+  if(!item) return;
+  const titulo = document.getElementById('titulo-'+filaId)?.value?.trim();
+  const cliente = document.getElementById('cliente-'+filaId)?.value?.trim();
+  const prioridade = document.getElementById('prio-'+filaId)?.value;
+  const analista_id = document.getElementById('anal-'+filaId)?.value;
+  if(!titulo||!cliente){toast('Preencha título e cliente','warning');return;}
+  const res = DB.createChamado({
+    titulo, cliente, base:'E-mail', modulo:'—', versao:'—',
+    descricao: `Chamado aberto via e-mail.\n\nRemetente: ${item.nome} <${item.remetente}>\n\n---\n${item.corpo}`,
+    prioridade, analista_id
+  });
+  if(res.ok){
+    // ⚠️ SLA começa AGORA (momento da recategorização), não da chegada do e-mail
+    const sla = DB.getSLA();
+    const horas = sla[prioridade] || 24;
+    const prazoSLA = new Date(Date.now() + horas * 3600000).toISOString();
+    const tempoBacklog = fmtDuracao(item.chegadaEm);
+    DB.updateChamado(res.chamado.id, {
+      prazoSLA,
+      historico: [...res.chamado.historico, {
+        data: new Date().toISOString(),
+        usuario_id: DB.currentUser()?.id,
+        usuario_nome: DB.currentUser()?.nome,
+        acao: `Categorizado a partir do backlog (aguardou ${tempoBacklog} na fila). SLA iniciado agora.`,
+        status: 'aberto'
+      }]
+    });
+    DB.addNotificacao(analista_id, `Novo chamado ${res.chamado.numero} aberto via e-mail de ${item.nome}`, res.chamado.id);
+    FilaDB.update(filaId, {status:'convertido', chamadoNumero:res.chamado.numero, chamadoId:res.chamado.id, analista_id});
+    toast(`Chamado ${res.chamado.numero} criado — SLA iniciado a partir da categorização`, 'success');
+    updateBadgeAbertos();
+    updateBadgeFila();
+    Router.go('fila');
+  }
+}
+
+function descartarEmail(filaId) {
+  FilaDB.update(filaId, {status:'descartado'});
+  toast('E-mail descartado', 'info');
+  updateBadgeFila();
+  Router.go('fila');
+}
+
+function mostrarInfoWebhook() {
+  openModal(`
+    <div class="modal-header"><div class="modal-title">📡 Integração de E-mail Real</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Para que e-mails reais abram automaticamente chamados nesta fila, use um dos métodos abaixo:</p>
+
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Opção 1 — EmailJS Inbound (recomendado)</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          1. Acesse <strong>emailjs.com → Email Services → Add Inbound Email</strong><br>
+          2. Configure o endereço: <code style="background:var(--surface3);padding:2px 6px;border-radius:4px">suporte@seudominio.com</code><br>
+          3. Defina o Webhook URL para o seu servidor Node.js/PHP<br>
+          4. O servidor chama <code style="background:var(--surface3);padding:2px 6px;border-radius:4px">POST /api/email-inbound</code> neste sistema
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Opção 2 — Zapier / Make (no-code)</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          1. Crie um Zap: <strong>Gmail → Webhook</strong><br>
+          2. Trigger: "New Email" na caixa suporte@<br>
+          3. Action: POST para seu endpoint com JSON:<br>
+          <code style="background:var(--surface3);padding:6px 8px;border-radius:4px;display:block;margin-top:6px;font-size:11px">{"remetente":"{{from}}","nome":"{{from_name}}","assunto":"{{subject}}","corpo":"{{body_plain}}"}</code>
+        </div>
+      </div>
+
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">Endpoint esperado pelo sistema</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">O sistema expõe a função <code style="background:var(--surface3);padding:2px 6px;border-radius:4px">window.PGMBoxAPI.receberEmail(payload)</code> que pode ser chamada por qualquer integração:</div>
+        <pre style="background:var(--surface3);padding:12px;border-radius:var(--radius);font-size:11px;font-family:var(--mono);color:var(--text2);overflow-x:auto">// Chame no seu backend/webhook:
+window.PGMBoxAPI.receberEmail({
+  remetente: "cliente@email.com",
+  nome: "Nome do Cliente",
+  assunto: "Título do problema",
+  corpo: "Descrição completa..."
+});</pre>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModals()">Fechar</button>
+      <button class="btn btn-primary" onclick="closeModals();Router.go('config')">Ir para Configurações</button>
+    </div>
+  `, '640px');
+}
+
+// API pública para integrações externas
+window.PGMBoxAPI = {
+  receberEmail: (payload) => {
+    if(!payload?.remetente||!payload?.assunto) return {ok:false,msg:'Campos obrigatórios: remetente, assunto'};
+    const item = FilaDB.add({
+      remetente: payload.remetente,
+      nome: payload.nome || payload.remetente,
+      assunto: payload.assunto,
+      corpo: payload.corpo || '(sem corpo)',
+      origem: 'email',
+      prioridadeSugerida: /urgent|crítico|critico|urgente/i.test(payload.assunto) ? 'alta' : 'media',
+      clienteSugerido: payload.cliente || (payload.nome||'').split(' ').slice(-1)[0] || payload.remetente.split('@')[1]
+    });
+    toast(`📨 Novo e-mail recebido: ${payload.assunto}`, 'info');
+    if(document.querySelector('[data-nav="fila"]')?.classList.contains('active')) Router.go('fila');
+    return {ok:true, filaId:item.id};
+  },
+  // Cria chamado diretamente via API (para integrações externas)
+  criarChamado: (payload) => {
+    if(!payload?.titulo||!payload?.cliente) return {ok:false,msg:'Campos obrigatórios: titulo, cliente'};
+    return DB.createChamado({
+      titulo: payload.titulo, cliente: payload.cliente,
+      base: payload.base||'API', modulo: payload.modulo||'—', versao: payload.versao||'—',
+      descricao: payload.descricao||'', prioridade: payload.prioridade||'media',
+      analista_id: payload.analista_id || DB.getUsers().find(u=>u.perfil==='admin')?.id
+    });
+  },
+  // Retorna lista de chamados (para sistemas externos lerem)
+  getChamados: (filtros) => DB.getChamados(filtros),
+  // Atualiza status de chamado via API
+  mudarStatus: (id, status, obs) => DB.mudarStatus(id, status, obs),
+};
+
+
+(function(){
+  DB.seed();
+
+  // Wire up login form and forgot password via addEventListener
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) loginForm.addEventListener('submit', handleLogin);
+  // Enter key on password field triggers login
+  const senhaInput = document.getElementById('login-senha');
+  if (senhaInput) senhaInput.addEventListener('keydown', e => { if(e.key==='Enter') handleLoginClick(); });
+  const btnEsqueci = document.getElementById('btn-esqueci');
+  if (btnEsqueci) btnEsqueci.addEventListener('click', mostrarEsqueciSenha);
+  const btnReset = document.getElementById('btn-reset-sistema');
+  if (btnReset) btnReset.addEventListener('click', forcarReset);
+
+  const user = DB.currentUser();
+  if(user){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app-shell').style.display='flex';
+    updateShell(user);
+    Router.go('dashboard');
+  } else {
+    Router.go('login');
+  }
+})();
+</script>
+</body>
+</html>
