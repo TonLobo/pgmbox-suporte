@@ -1969,13 +1969,12 @@ Router.register('usuarios',()=>{
               <td><span class="badge ${u.ativo?'badge-green':'badge-gray'}">${u.ativo?'✓ Ativo':'✕ Inativo'}</span></td>
               <td style="font-size:12px;color:var(--text2)">${fmtDateShort(u.criadoEm)}</td>
               <td>
-                <div style="display:flex;gap:5px;flex-wrap:wrap">
-                  <button class="btn btn-ghost btn-xs" onclick="modalEditarUsuario('${u.id}')" title="Editar usuário" style="padding:4px 10px">✏️ Editar</button>
-                  ${u.id!=='usr_admin'?`
-                  <button class="btn btn-ghost btn-xs" onclick="toggleAtivo('${u.id}',${!u.ativo})" title="${u.ativo?'Desativar':'Ativar'} usuário"
-                    style="padding:4px 10px;color:var(--${u.ativo?'amber':'green'})">${u.ativo?'⏸ Desativar':'▶ Ativar'}</button>
-                  <button class="btn btn-ghost btn-xs" onclick="excluirUsuario('${u.id}')" data-nome="${u.nome}" title="Excluir usuário permanentemente"
-                    style="padding:4px 10px;color:var(--red)">🗑️ Excluir</button>`:''}
+                <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+                  <button class="btn btn-ghost btn-xs" onclick="modalEditarUsuario('${u.id}')" style="padding:5px 12px;border:1px solid var(--border)">✏️ Editar</button>
+                  <button class="btn btn-ghost btn-xs" onclick="toggleAtivo('${u.id}',${!u.ativo})"
+                    style="padding:5px 12px;border:1px solid var(--border);color:${u.ativo?'var(--amber)':'var(--green)'}">${u.ativo?'⏸ Desativar':'▶ Ativar'}</button>
+                  ${u.id!=='usr_admin'?`<button class="btn btn-ghost btn-xs" onclick="excluirUsuario('${u.id}')" data-nome="${u.nome}"
+                    style="padding:5px 12px;border:1px solid rgba(239,68,68,.3);color:var(--red)">🗑️ Excluir</button>`:''}
                 </div>
               </td>
             </tr>`).join('')}
