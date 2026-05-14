@@ -447,7 +447,7 @@ const DB = (() => {
   const gcfg = (k,d=null) => { const v=localStorage.getItem('pgmbox_cfg_'+k); return v!==null?JSON.parse(v):d };
   const scfg = (k,v) => localStorage.setItem('pgmbox_cfg_'+k, JSON.stringify(v));
 
-  const APP_VERSION = '8.0';
+  const APP_VERSION = '11.0';
 
   function resetStorage() {
     const keys = [];
@@ -472,10 +472,10 @@ const DB = (() => {
       // Full reset: old version or missing admin
       resetStorage();
       sc('users', [{id:'usr_admin',nome:'Everton Lobo',email:'everton@pgmbox.com.br',username:'everton.lobo',
-        perfil:'admin',nivel:null,ativo:true,senha:adminPw,telefone:'',endereco:{},criadoEm:new Date().toISOString()}]);
+        perfil:'admin',nivel:null,ativo:true,senha:adminPw,cpf:'',telefone:'',endereco:{},criadoEm:new Date().toISOString()}]);
       sc('chamados', []);
       scfg('sla', {baixa:72,media:24,alta:8,critica:2});
-      scfg('smtp', {serviceId:'',templateId:'',publicKey:'',fromEmail:'suporte@pgmbox.com.br',fromName:'PGMBox Suporte'});
+      scfg('smtp', {provedor:'gmail',serviceId:'',templateId:'',publicKey:'',fromEmail:'',fromName:'PGMBox Suporte'});
       scfg('seq', 0);
       scfg('app_version', APP_VERSION);
       scfg('seeded', true);
@@ -512,13 +512,13 @@ const DB = (() => {
     return username;
   }
 
-  function createUser({nome, email, perfil, nivel, password, telefone, rua, numero, complemento, bairro, cidade, uf, cep}) {
+  function createUser({nome, email, perfil, nivel, password, cpf, matricula, telefone, rua, numero, complemento, bairro, cidade, uf, cep}) {
     const users = gc('users');
     if (users.find(u => u.email === email)) return {ok:false, msg:'E-mail já cadastrado.'};
     const username = gerarUsername(nome, users);
     const user = {
       id:'usr_'+Date.now(), nome, email, username, perfil, nivel:nivel||null,
-      telefone:telefone||'', endereco:{rua:rua||'',numero:numero||'',complemento:complemento||'',bairro:bairro||'',cidade:cidade||'',uf:uf||'',cep:cep||''},
+      cpf:cpf||'', matricula:matricula||'', telefone:telefone||'', endereco:{rua:rua||'',numero:numero||'',complemento:complemento||'',bairro:bairro||'',cidade:cidade||'',uf:uf||'',cep:cep||''},
       ativo:true, senha:_enc(password), senhaTemporaria:true, criadoEm:new Date().toISOString()
     };
     users.push(user); sc('users', users); return {ok:true, user};
@@ -1948,7 +1948,7 @@ Router.register('usuarios',()=>{
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Nome / Usuário</th><th>E-mail</th><th>Telefone</th><th>Cidade/UF</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th></th></tr></thead>
+          <thead><tr><th>Nome / Usuário</th><th>E-mail</th><th>CPF</th><th>Matrícula</th><th>Telefone</th><th>Cidade/UF</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th></th></tr></thead>
           <tbody>
             ${users.map(u=>`<tr>
               <td>
@@ -1961,6 +1961,8 @@ Router.register('usuarios',()=>{
                 </div>
               </td>
               <td style="font-size:12px;color:var(--text2)">${u.email}</td>
+              <td style="font-size:12px;color:var(--text2);font-family:var(--mono)">${u.cpf||'—'}</td>
+              <td style="font-size:12px;color:var(--text2)">${u.matricula||'—'}</td>
               <td style="font-size:12px;color:var(--text2)">${u.telefone||'—'}</td>
               <td style="font-size:12px;color:var(--text2)">${u.endereco?.cidade?(u.endereco.cidade+(u.endereco.uf?'/'+u.endereco.uf:'')):'—'}</td>
               <td>${u.perfil==='admin'?'<span class="badge badge-purple">👑 ADM</span>':u.perfil==='consultor'?'<span class="badge badge-cyan">🎯 Consultor</span>':`<span class="badge badge-blue">🔧 Analista N${u.nivel}</span>`}</td>
@@ -1994,7 +1996,11 @@ function modalCriarUsuario() {
           <div class="field-group"><label class="field-label required">Nome completo</label><input id="u-nome" class="input" placeholder="Nome completo"></div>
           <div class="field-group"><label class="field-label required">E-mail</label><input id="u-email" class="input" type="email" placeholder="email@empresa.com.br"></div>
         </div>
-        <div class="field-group"><label class="field-label">Telefone</label><input id="u-telefone" class="input" placeholder="(00) 00000-0000" oninput="mascaraTelefone(this)"></div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group"><label class="field-label">CPF</label><input id="u-cpf" class="input" placeholder="000.000.000-00" maxlength="14" oninput="mascaraCPF(this)"><div id="cpf-status" style="font-size:11px;margin-top:3px;min-height:14px"></div></div>
+          <div class="field-group"><label class="field-label">Telefone</label><input id="u-telefone" class="input" placeholder="(00) 00000-0000" oninput="mascaraTelefone(this)"></div>
+        </div>
+        <div class="field-group"><label class="field-label">Matrícula</label><input id="u-matricula" class="input" placeholder="Número de matrícula"></div>
         <div style="border-top:1px solid var(--border);padding-top:14px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Endereço</div>
         <div class="form-grid form-grid-2" style="gap:10px">
           <div class="field-group">
@@ -2050,6 +2056,64 @@ function toggleNivelField(perfil) {
   if(f) f.style.display=perfil==='analista'?'block':'none';
 }
 
+function validarCPF(cpf) {
+  // Algoritmo oficial Receita Federal — valida dígitos verificadores
+  const d = String(cpf).replace(/\D/g,'');
+  if(d.length!==11) return false;
+  if(/^(\d)\1{10}$/.test(d)) return false;  // bloqueia 000.000.000-00, 111.111.111-11 etc.
+  let s=0;
+  for(let i=0;i<9;i++) s+=parseInt(d[i])*(10-i);
+  let r=11-(s%11); if(r>=10) r=0;
+  if(r!==parseInt(d[9])) return false;
+  s=0;
+  for(let i=0;i<10;i++) s+=parseInt(d[i])*(11-i);
+  r=11-(s%11); if(r>=10) r=0;
+  return r===parseInt(d[10]);
+}
+
+function cpfStatus(digits) {
+  if(digits.length===0) return {ok:null, msg:''};
+  if(digits.length<11)  return {ok:null, msg:'Digite os 11 dígitos'};
+  if(validarCPF(digits)) return {ok:true,  msg:'CPF válido ✓'};
+  return {ok:false, msg:'CPF inválido — verifique os números digitados'};
+}
+
+function mascaraCPF(el) {
+  let v = el.value.replace(/\D/g,'');
+  if(v.length>11) v=v.slice(0,11);
+  if(v.length>9) v=v.replace(/(\d{3})(\d{3})(\d{3})(\d+)/,'$1.$2.$3-$4');
+  else if(v.length>6) v=v.replace(/(\d{3})(\d{3})(\d+)/,'$1.$2.$3');
+  else if(v.length>3) v=v.replace(/(\d{3})(\d+)/,'$1.$2');
+  el.value=v;
+  const digits=v.replace(/\D/g,'');
+  // Find nearest cpf-status div
+  const s=el.parentElement?.querySelector('#cpf-status') ||
+           el.closest('.field-group')?.querySelector('#cpf-status') ||
+           document.getElementById('cpf-status');
+  if(!s) return;
+  const st=cpfStatus(digits);
+  s.textContent=st.msg;
+  s.style.color = st.ok===true?'var(--green)':st.ok===false?'var(--red)':'var(--text2)';
+  // Visual feedback on input border
+  el.style.borderColor = st.ok===true?'var(--green)':st.ok===false?'var(--red)':'';
+}
+
+function checarCPFAntesSalvar(inputId) {
+  const el=document.getElementById(inputId);
+  if(!el) return true; // campo ausente, não bloqueia
+  const digits=el.value.replace(/\D/g,'');
+  if(digits.length===0) return true; // CPF não preenchido = opcional
+  const st=cpfStatus(digits);
+  if(!st.ok) {
+    const s=document.getElementById('cpf-status');
+    if(s){s.textContent=st.msg;s.style.color='var(--red)';}
+    el.style.borderColor='var(--red)';
+    el.focus();
+    toast('CPF inválido — corrija antes de salvar','error');
+    return false;
+  }
+  return true;
+}
 function mascaraTelefone(el) {
   let v = el.value.replace(/\D/g,'');
   if(v.length>11) v=v.slice(0,11);
@@ -2092,8 +2156,11 @@ function salvarNovoUsuario() {
   const nome=g('u-nome'),email=g('u-email'),perfil=g('u-perfil'),nivel=g('u-nivel'),senha=g('u-senha');
   if(!nome||!email||!senha){toast('Preencha nome, e-mail e senha','warning');return;}
   if(senha.length<8){toast('Senha deve ter mínimo 8 caracteres','warning');return;}
+  if(!checarCPFAntesSalvar('u-cpf')) return;
   const res=DB.createUser({
     nome,email,perfil,nivel:perfil==='analista'?parseInt(nivel):null,password:senha,
+    cpf:g('u-cpf'),
+    matricula:g('u-matricula'),
     telefone:g('u-telefone'),
     cep:g('u-cep'),rua:g('u-rua'),numero:g('u-numero'),
     complemento:g('u-complemento'),bairro:g('u-bairro'),
@@ -2121,8 +2188,12 @@ function modalEditarUsuario(id) {
           <div class="field-group"><label class="field-label">Nome completo</label><input id="eu-nome" class="input" value="${u.nome}"></div>
           <div class="field-group"><label class="field-label">E-mail</label><input id="eu-email" class="input" type="email" value="${u.email}"></div>
         </div>
-        <div class="field-group"><label class="field-label">Telefone</label><input id="eu-telefone" class="input" value="${u.telefone||''}" placeholder="(00) 00000-0000" oninput="mascaraTelefone(this)"></div>
-        <div style="border-top:1px solid var(--border);padding-top:12px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Endereço</div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group"><label class="field-label">CPF</label><input id="eu-cpf" class="input" value="${u.cpf||''}" placeholder="000.000.000-00" maxlength="14" oninput="mascaraCPF(this)"><div id="cpf-status" style="font-size:11px;margin-top:3px;min-height:14px"></div></div>
+          <div class="field-group"><label class="field-label">Telefone</label><input id="eu-telefone" class="input" value="${u.telefone||''}" placeholder="(00) 00000-0000" oninput="mascaraTelefone(this)"></div>
+        </div>
+                <div class="field-group"><label class="field-label">Matrícula</label><input id="eu-matricula" class="input" value="${u.matricula||''}" placeholder="Número de matrícula"></div>
+<div style="border-top:1px solid var(--border);padding-top:12px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Endereço</div>
         <div class="form-grid form-grid-2" style="gap:10px">
           <div class="field-group">
             <label class="field-label">CEP</label>
@@ -2170,9 +2241,12 @@ function modalEditarUsuario(id) {
 function toggleNivelEdit(p){const f=document.getElementById('nivel-edit');if(f)f.style.display=p==='analista'?'block':'none';}
 function salvarEdicaoUsuario(id) {
   const g = sel => document.getElementById(sel)?.value?.trim()||'';
+  if(!checarCPFAntesSalvar('eu-cpf')) return;
   const nome=g('eu-nome'),email=g('eu-email'),perfil=g('eu-perfil'),nivel=g('eu-nivel'),senha=g('eu-senha');
   DB.updateUser(id,{
     nome,email,perfil,nivel:perfil==='analista'?parseInt(nivel):null,
+    cpf:g('eu-cpf')||g('u-cpf'),
+    matricula:g('eu-matricula')||g('u-matricula'),
     telefone:g('eu-telefone')||g('u-telefone'),
     endereco:{
       cep:g('u-cep'),rua:g('u-rua'),numero:g('u-numero'),
@@ -2220,17 +2294,77 @@ Router.register('config',()=>{
 
       <!-- SMTP -->
       <div class="card">
-        <div class="section-title" style="margin-bottom:4px">📧 Configuração de E-mail (EmailJS)</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:14px">Configure o serviço para envio de notificações por e-mail.<br>Acesse <a href="https://emailjs.com" target="_blank">emailjs.com</a> para obter as credenciais.</div>
-        <form onsubmit="salvarSMTP(event)">
-          <div class="form-grid" style="gap:10px">
-            <div class="field-group"><label class="field-label">Service ID</label><input name="serviceId" class="input" value="${smtp.serviceId||''}" placeholder="Ex: service_abc123"></div>
-            <div class="field-group"><label class="field-label">Template ID</label><input name="templateId" class="input" value="${smtp.templateId||''}" placeholder="Ex: template_xyz"></div>
-            <div class="field-group"><label class="field-label">Public Key</label><input name="publicKey" class="input" value="${smtp.publicKey||''}" placeholder="Ex: A1B2C3D4E5..."></div>
-            <div class="field-group"><label class="field-label">E-mail do remetente</label><input name="fromEmail" class="input" type="email" value="${smtp.fromEmail||'suporte@pgmbox.com.br'}"></div>
-            <div class="field-group"><label class="field-label">Nome do remetente</label><input name="fromName" class="input" value="${smtp.fromName||'PGMBox Suporte'}"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div class="section-title">📧 Configuração de E-mail</div>
+          ${smtp.serviceId&&smtp.publicKey?
+            '<span class="badge badge-green">✓ Configurado</span>':
+            '<span class="badge badge-amber">⚠ Pendente</span>'}
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:14px">
+          O sistema usa <strong>EmailJS</strong> como intermediário — não é necessário servidor próprio.
+          Acesse <a href="https://emailjs.com" target="_blank" style="color:var(--accent)">emailjs.com</a> para criar conta gratuita.
+        </div>
+
+        <!-- Seletor de provedor -->
+        <div style="margin-bottom:14px">
+          <label class="field-label" style="margin-bottom:8px;display:block">Provedor de e-mail padrão</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${[
+              {id:'gmail',   label:'Gmail',   icon:'✉️', desc:'Google Workspace / Gmail pessoal'},
+              {id:'outlook', label:'Outlook', icon:'📨', desc:'Microsoft 365 / Hotmail'},
+              {id:'smtp',    label:'SMTP',    icon:'⚙️', desc:'Servidor próprio'},
+              {id:'outro',   label:'Outro',   icon:'🔌', desc:'Qualquer serviço EmailJS'},
+            ].map(p=>`
+              <button type="button" onclick="selecionarProvedor('${p.id}')"
+                style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 16px;border-radius:var(--radius);border:2px solid ${(smtp.provedor||'gmail')===p.id?'var(--accent)':'var(--border)'};background:${(smtp.provedor||'gmail')===p.id?'rgba(79,142,247,.1)':'transparent'};cursor:pointer;transition:.15s;min-width:80px">
+                <span style="font-size:20px">${p.icon}</span>
+                <span style="font-size:12px;font-weight:600;color:${(smtp.provedor||'gmail')===p.id?'var(--accent)':'var(--text)'}">${p.label}</span>
+              </button>`
+            ).join('')}
           </div>
-          <button type="submit" class="btn btn-primary btn-sm" style="margin-top:12px">Salvar Configurações</button>
+        </div>
+
+        <!-- Instrução por provedor -->
+        <div id="smtp-instrucao" style="background:var(--surface2);border-radius:var(--radius);padding:12px 14px;font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7">
+          ${(()=>{
+            const p = smtp.provedor||'gmail';
+            if(p==='gmail') return '1. Acesse <strong>emailjs.com</strong> → <strong>Email Services → Add New Service → Gmail</strong><br>2. Conecte sua conta Google e marque <strong>todas as permissões</strong><br>3. Copie o <strong>Service ID</strong> gerado';
+            if(p==='outlook') return '1. Acesse <strong>emailjs.com</strong> → <strong>Email Services → Add New Service → Outlook</strong><br>2. Autorize com sua conta Microsoft<br>3. Copie o <strong>Service ID</strong> gerado';
+            if(p==='smtp') return '1. Acesse <strong>emailjs.com</strong> → <strong>Email Services → Add New Service → Custom SMTP</strong><br>2. Informe: Host, Porta (587/TLS ou 465/SSL), Usuário e Senha<br>3. Clique em <strong>Test</strong> e copie o <strong>Service ID</strong>';
+            return '1. Configure qualquer serviço de e-mail no <strong>emailjs.com</strong><br>2. Copie o <strong>Service ID</strong>, <strong>Template ID</strong> e <strong>Public Key</strong>';
+          })()}
+        </div>
+
+        <form onsubmit="salvarSMTP(event)">
+          <input type="hidden" name="provedor" id="smtp-provedor" value="${smtp.provedor||'gmail'}">
+          <div class="form-grid" style="gap:10px">
+            <div class="field-group">
+              <label class="field-label">Service ID <span style="color:var(--red)">*</span></label>
+              <input name="serviceId" class="input" value="${smtp.serviceId||''}" placeholder="service_xxxxxxx">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Template ID <span style="color:var(--red)">*</span></label>
+              <input name="templateId" class="input" value="${smtp.templateId||''}" placeholder="template_xxxxxxx">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Public Key <span style="color:var(--red)">*</span></label>
+              <input name="publicKey" class="input" value="${smtp.publicKey||''}" placeholder="Chave pública da conta EmailJS">
+            </div>
+            <div class="form-grid form-grid-2" style="gap:10px">
+              <div class="field-group">
+                <label class="field-label">E-mail do remetente</label>
+                <input name="fromEmail" class="input" type="email" value="${smtp.fromEmail||''}" placeholder="suporte@empresa.com.br">
+              </div>
+              <div class="field-group">
+                <label class="field-label">Nome do remetente</label>
+                <input name="fromName" class="input" value="${smtp.fromName||'PGMBox Suporte'}" placeholder="PGMBox Suporte">
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+            <button type="submit" class="btn btn-primary btn-sm">Salvar Configurações</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="testarEmail()">Testar envio</button>
+          </div>
         </form>
       </div>
     </div>
@@ -2273,8 +2407,57 @@ function salvarSLA(e) {
 function salvarSMTP(e) {
   e.preventDefault();
   const form=new FormData(e.target);
-  DB.setSMTP({serviceId:form.get('serviceId'),templateId:form.get('templateId'),publicKey:form.get('publicKey'),fromEmail:form.get('fromEmail'),fromName:form.get('fromName')});
+  const cfg={
+    provedor: form.get('provedor')||'gmail',
+    serviceId: form.get('serviceId'),
+    templateId: form.get('templateId'),
+    publicKey: form.get('publicKey'),
+    fromEmail: form.get('fromEmail'),
+    fromName: form.get('fromName')
+  };
+  DB.setSMTP(cfg);
   toast('Configurações de e-mail salvas','success');
+  // Re-render para atualizar badge de status
+  Router.go('config');
+}
+
+function selecionarProvedor(p) {
+  // Update hidden input
+  const el = document.getElementById('smtp-provedor');
+  if(el) el.value = p;
+  // Update button styles
+  document.querySelectorAll('[onclick^="selecionarProvedor"]').forEach(btn=>{
+    const isActive = btn.getAttribute('onclick') === `selecionarProvedor('${p}')`;
+    btn.style.borderColor = isActive?'var(--accent)':'var(--border)';
+    btn.style.background  = isActive?'rgba(79,142,247,.1)':'transparent';
+    btn.querySelector('span:last-child').style.color = isActive?'var(--accent)':'var(--text)';
+  });
+  // Update instruction text
+  const instrucoes = {
+    gmail:   '1. Acesse <strong>emailjs.com</strong> → <strong>Email Services → Add New Service → Gmail</strong><br>2. Conecte sua conta Google e marque <strong>todas as permissões</strong><br>3. Copie o <strong>Service ID</strong> gerado',
+    outlook: '1. Acesse <strong>emailjs.com</strong> → <strong>Email Services → Add New Service → Outlook</strong><br>2. Autorize com sua conta Microsoft<br>3. Copie o <strong>Service ID</strong> gerado',
+    smtp:    '1. Acesse <strong>emailjs.com</strong> → <strong>Email Services → Add New Service → Custom SMTP</strong><br>2. Informe: Host, Porta (587/TLS ou 465/SSL), Usuário e Senha<br>3. Clique em <strong>Test</strong> e copie o <strong>Service ID</strong>',
+    outro:   '1. Configure qualquer serviço de e-mail no <strong>emailjs.com</strong><br>2. Copie o <strong>Service ID</strong>, <strong>Template ID</strong> e <strong>Public Key</strong>'
+  };
+  const div = document.getElementById('smtp-instrucao');
+  if(div) div.innerHTML = instrucoes[p]||instrucoes.outro;
+}
+
+async function testarEmail() {
+  const user = DB.currentUser();
+  if(!user?.email){toast('Usuário sem e-mail cadastrado','error');return;}
+  const btn = event.target;
+  btn.disabled=true; btn.textContent='Enviando...';
+  const r = await enviarEmailJS(
+    user.email, user.nome,
+    '[PGMBox] Teste de configuração de e-mail',
+    'Este é um e-mail de teste enviado pelo PGMBox Suporte.\n\nSe você recebeu esta mensagem, a configuração de e-mail está funcionando corretamente!',
+    null
+  );
+  btn.disabled=false; btn.textContent='Testar envio';
+  if(r.simulado) toast('SMTP não configurado — e-mail simulado (não enviado)','warning');
+  else if(r.ok) toast('E-mail de teste enviado para '+user.email,'success');
+  else toast('Erro ao enviar: '+r.msg,'error');
 }
 
 // ═══════════════════════════════════════════════════════════
