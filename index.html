@@ -346,11 +346,11 @@ textarea.input{resize:vertical;min-height:80px}
       </div>
     </div>
     <div class="login-title">Bem-vindo de volta</div>
-    <div class="login-sub">Entre com suas credenciais para acessar o sistema.</div>
+    <div class="login-sub">Informe seu usuário (ex: everton.lobo) e senha para acessar.</div>
     <form id="login-form">
       <div class="field">
-        <label for="login-email">E-mail</label>
-        <input id="login-email" type="email" class="input" placeholder="seu@email.com.br" required autocomplete="username">
+        <label for="login-email">Usuário</label>
+        <input id="login-email" type="text" class="input" placeholder="ex: everton.lobo" required autocomplete="username" style="text-transform:lowercase">
       </div>
       <div class="field">
         <label for="login-senha">Senha</label>
@@ -447,7 +447,7 @@ const DB = (() => {
   const gcfg = (k,d=null) => { const v=localStorage.getItem('pgmbox_cfg_'+k); return v!==null?JSON.parse(v):d };
   const scfg = (k,v) => localStorage.setItem('pgmbox_cfg_'+k, JSON.stringify(v));
 
-  const APP_VERSION = '7.0';
+  const APP_VERSION = '8.0';
 
   function resetStorage() {
     const keys = [];
@@ -471,8 +471,8 @@ const DB = (() => {
     if (gcfg('app_version') !== APP_VERSION || !existingAdmin || !existingAdmin.senha) {
       // Full reset: old version or missing admin
       resetStorage();
-      sc('users', [{id:'usr_admin',nome:'Everton Lobo',email:'everton@pgmbox.com.br',
-        perfil:'admin',nivel:null,ativo:true,senha:adminPw,criadoEm:new Date().toISOString()}]);
+      sc('users', [{id:'usr_admin',nome:'Everton Lobo',email:'everton@pgmbox.com.br',username:'everton.lobo',
+        perfil:'admin',nivel:null,ativo:true,senha:adminPw,telefone:'',endereco:{},criadoEm:new Date().toISOString()}]);
       sc('chamados', []);
       scfg('sla', {baixa:72,media:24,alta:8,critica:2});
       scfg('smtp', {serviceId:'',templateId:'',publicKey:'',fromEmail:'suporte@pgmbox.com.br',fromName:'PGMBox Suporte'});
@@ -487,9 +487,11 @@ const DB = (() => {
     }
   }
 
-  function login(email, pw) {
+  function login(loginInput, pw) {
     const users = gc('users');
-    const user = users.find(u => u.email === email && u.ativo);
+    const input = loginInput.trim().toLowerCase();
+    // Permite login por username OU por e-mail
+    const user = users.find(u => u.ativo && (u.username === input || u.email === input));
     if (!user) return {ok:false, msg:'Usuário não encontrado ou inativo.'};
     if (!_chk(pw, user.senha)) return {ok:false, msg:'Senha incorreta.'};
     sessionStorage.setItem('pgmbox_session', JSON.stringify(user));
@@ -500,11 +502,25 @@ const DB = (() => {
   function currentUser() { try{return JSON.parse(sessionStorage.getItem('pgmbox_session'))}catch{return null} }
   function getUsers() { return gc('users'); }
 
-  function createUser({nome, email, perfil, nivel, password}) {
+  function gerarUsername(nome, existingUsers) {
+    // Gera username: primeiro.ultimo em minúsculas sem acento
+    const clean = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const parts = nome.trim().split(/\s+/);
+    let base = parts.length > 1 ? clean(parts[0])+'.'+clean(parts[parts.length-1]) : clean(parts[0]);
+    let username = base, n = 2;
+    while (existingUsers.find(u => u.username === username)) { username = base + n; n++; }
+    return username;
+  }
+
+  function createUser({nome, email, perfil, nivel, password, telefone, rua, numero, complemento, bairro, cidade, uf, cep}) {
     const users = gc('users');
     if (users.find(u => u.email === email)) return {ok:false, msg:'E-mail já cadastrado.'};
-    const user = {id:'usr_'+Date.now(), nome, email, perfil, nivel:nivel||null,
-      ativo:true, senha:_enc(password), senhaTemporaria:true, criadoEm:new Date().toISOString()};
+    const username = gerarUsername(nome, users);
+    const user = {
+      id:'usr_'+Date.now(), nome, email, username, perfil, nivel:nivel||null,
+      telefone:telefone||'', endereco:{rua:rua||'',numero:numero||'',complemento:complemento||'',bairro:bairro||'',cidade:cidade||'',uf:uf||'',cep:cep||''},
+      ativo:true, senha:_enc(password), senhaTemporaria:true, criadoEm:new Date().toISOString()
+    };
     users.push(user); sc('users', users); return {ok:true, user};
   }
 
@@ -837,7 +853,7 @@ function mostrarEsqueciSenha() {
     <div class="login-title">Recuperar senha</div>
     <div class="login-sub">Informe seu e-mail cadastrado. Você receberá uma senha temporária para acessar o sistema.</div>
     <div class="field">
-      <label for="rec-email">E-mail</label>
+      <label for="rec-email">E-mail cadastrado</label>
       <input id="rec-email" type="email" class="input" placeholder="seu@email.com.br" autocomplete="email">
     </div>
     <div class="login-erro" id="rec-erro"></div>
@@ -862,11 +878,11 @@ function voltarLogin() {
       </div>
     </div>
     <div class="login-title">Bem-vindo de volta</div>
-    <div class="login-sub">Entre com suas credenciais para acessar o sistema.</div>
+    <div class="login-sub">Informe seu usuário (ex: everton.lobo) e senha para acessar.</div>
     <form id="login-form">
       <div class="field">
-        <label for="login-email">E-mail</label>
-        <input id="login-email" type="email" class="input" placeholder="seu@email.com.br" required autocomplete="username">
+        <label for="login-email">Usuário</label>
+        <input id="login-email" type="text" class="input" placeholder="ex: everton.lobo" required autocomplete="username" style="text-transform:lowercase">
       </div>
       <div class="field">
         <label for="login-senha">Senha</label>
@@ -1932,16 +1948,21 @@ Router.register('usuarios',()=>{
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th></th></tr></thead>
+          <thead><tr><th>Nome / Usuário</th><th>E-mail</th><th>Telefone</th><th>Cidade/UF</th><th>Perfil</th><th>Status</th><th>Cadastro</th><th></th></tr></thead>
           <tbody>
             ${users.map(u=>`<tr>
               <td>
                 <div style="display:flex;align-items:center;gap:10px">
                   <div class="avatar" style="width:30px;height:30px;font-size:11px;flex-shrink:0">${u.nome.split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
-                  <span style="font-weight:500">${u.nome}</span>
+                  <div>
+                    <div style="font-weight:500;font-size:13px">${u.nome}</div>
+                    <div style="font-size:11px;color:var(--text2);font-family:var(--mono)">${u.username||'—'}</div>
+                  </div>
                 </div>
               </td>
               <td style="font-size:12px;color:var(--text2)">${u.email}</td>
+              <td style="font-size:12px;color:var(--text2)">${u.telefone||'—'}</td>
+              <td style="font-size:12px;color:var(--text2)">${u.endereco?.cidade?(u.endereco.cidade+(u.endereco.uf?'/'+u.endereco.uf:'')):'—'}</td>
               <td>${u.perfil==='admin'?'<span class="badge badge-purple">👑 ADM</span>':u.perfil==='consultor'?'<span class="badge badge-cyan">🎯 Consultor</span>':`<span class="badge badge-blue">🔧 Analista N${u.nivel}</span>`}</td>
               <td><span class="badge ${u.ativo?'badge-green':'badge-gray'}">${u.ativo?'✓ Ativo':'✕ Inativo'}</span></td>
               <td style="font-size:12px;color:var(--text2)">${fmtDateShort(u.criadoEm)}</td>
@@ -1965,9 +1986,37 @@ function modalCriarUsuario() {
   openModal(`
     <div class="modal-header"><div class="modal-title">Novo Usuário</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
     <div class="modal-body">
+      <div style="font-size:11px;color:var(--text2);background:var(--surface2);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px">
+        O nome de usuário (login) será gerado automaticamente a partir do nome. Ex: <strong>João Silva</strong> → <code>joao.silva</code>
+      </div>
       <div class="form-grid" style="gap:14px">
-        <div class="field-group"><label class="field-label required">Nome completo</label><input id="u-nome" class="input" placeholder="Nome do usuário"></div>
-        <div class="field-group"><label class="field-label required">E-mail</label><input id="u-email" class="input" type="email" placeholder="email@empresa.com.br"></div>
+        <div class="form-grid form-grid-2" style="gap:14px">
+          <div class="field-group"><label class="field-label required">Nome completo</label><input id="u-nome" class="input" placeholder="Nome completo"></div>
+          <div class="field-group"><label class="field-label required">E-mail</label><input id="u-email" class="input" type="email" placeholder="email@empresa.com.br"></div>
+        </div>
+        <div class="field-group"><label class="field-label">Telefone</label><input id="u-telefone" class="input" placeholder="(00) 00000-0000" oninput="mascaraTelefone(this)"></div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Endereço</div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group">
+            <label class="field-label">CEP</label>
+            <div style="display:flex;gap:8px">
+              <input id="u-cep" class="input" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" style="flex:1">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="buscarCEP()" style="flex-shrink:0;white-space:nowrap">🔍 Buscar</button>
+            </div>
+            <div id="cep-status" style="font-size:11px;margin-top:4px;min-height:14px"></div>
+          </div>
+          <div class="field-group"><label class="field-label">Número</label><input id="u-numero" class="input" placeholder="123"></div>
+        </div>
+        <div class="field-group"><label class="field-label">Rua / Avenida / Travessa</label><input id="u-rua" class="input" placeholder="Preenchido automaticamente pelo CEP"></div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group"><label class="field-label">Bairro</label><input id="u-bairro" class="input" placeholder="Bairro"></div>
+          <div class="field-group"><label class="field-label">Complemento</label><input id="u-complemento" class="input" placeholder="Apto, Sala, Bloco..."></div>
+        </div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group"><label class="field-label">Cidade</label><input id="u-cidade" class="input" placeholder="Cidade"></div>
+          <div class="field-group"><label class="field-label">UF</label><input id="u-uf" class="input" placeholder="SP" maxlength="2" style="text-transform:uppercase"></div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Acesso</div>
         <div class="form-grid form-grid-2" style="gap:14px">
           <div class="field-group">
             <label class="field-label required">Perfil</label>
@@ -1993,7 +2042,7 @@ function modalCriarUsuario() {
       <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarNovoUsuario()">Criar Usuário</button>
     </div>
-  `);
+  `, '680px');
 }
 
 function toggleNivelField(perfil) {
@@ -2001,27 +2050,101 @@ function toggleNivelField(perfil) {
   if(f) f.style.display=perfil==='analista'?'block':'none';
 }
 
+function mascaraTelefone(el) {
+  let v = el.value.replace(/\D/g,'');
+  if(v.length>11) v=v.slice(0,11);
+  if(v.length>6) v=v.replace(/(\d{2})(\d{5})(\d)/,'($1) $2-$3');
+  else if(v.length>2) v=v.replace(/(\d{2})(\d+)/,'($1) $2');
+  el.value=v;
+}
+function mascaraCEP(el) {
+  let v = el.value.replace(/\D/g,'');
+  if(v.length>8) v=v.slice(0,8);
+  if(v.length>5) v=v.replace(/(\d{5})(\d+)/,'$1-$2');
+  el.value=v;
+  if(v.replace('-','').length===8) buscarCEP();
+}
+async function buscarCEP() {
+  const cepEl = document.getElementById('u-cep');
+  const status = document.getElementById('cep-status');
+  if(!cepEl||!status) return;
+  const cep = cepEl.value.replace(/\D/g,'');
+  if(cep.length!==8){status.textContent='CEP inválido (8 dígitos)';status.style.color='var(--red)';return;}
+  status.textContent='Buscando...';status.style.color='var(--text2)';
+  try {
+    const r = await fetch('https://viacep.com.br/ws/'+cep+'/json/');
+    const d = await r.json();
+    if(d.erro){status.textContent='CEP não encontrado.';status.style.color='var(--red)';return;}
+    const f = id => document.getElementById(id);
+    if(f('u-rua')) f('u-rua').value = d.logradouro||'';
+    if(f('u-bairro')) f('u-bairro').value = d.bairro||'';
+    if(f('u-cidade')) f('u-cidade').value = d.localidade||'';
+    if(f('u-uf')) f('u-uf').value = d.uf||'';
+    status.textContent='✓ Endereço encontrado: '+d.localidade+'/'+d.uf;
+    status.style.color='var(--green)';
+    if(f('u-numero')) f('u-numero').focus();
+  } catch(e) {
+    status.textContent='Erro ao consultar CEP. Verifique sua conexão.';status.style.color='var(--red)';
+  }
+}
 function salvarNovoUsuario() {
-  const nome=document.getElementById('u-nome')?.value?.trim();
-  const email=document.getElementById('u-email')?.value?.trim();
-  const perfil=document.getElementById('u-perfil')?.value;
-  const nivel=document.getElementById('u-nivel')?.value;
-  const senha=document.getElementById('u-senha')?.value;
-  if(!nome||!email||!senha){toast('Preencha todos os campos','warning');return;}
+  const g = id => document.getElementById(id)?.value?.trim()||'';
+  const nome=g('u-nome'),email=g('u-email'),perfil=g('u-perfil'),nivel=g('u-nivel'),senha=g('u-senha');
+  if(!nome||!email||!senha){toast('Preencha nome, e-mail e senha','warning');return;}
   if(senha.length<8){toast('Senha deve ter mínimo 8 caracteres','warning');return;}
-  const res=DB.createUser({nome,email,perfil,nivel:perfil==='analista'?parseInt(nivel):null,password:senha});
-  if(res.ok){closeModals();toast('Usuário criado com sucesso','success');if(window.renderUsuarios)window.renderUsuarios();}
-  else toast(res.msg,'error');
+  const res=DB.createUser({
+    nome,email,perfil,nivel:perfil==='analista'?parseInt(nivel):null,password:senha,
+    telefone:g('u-telefone'),
+    cep:g('u-cep'),rua:g('u-rua'),numero:g('u-numero'),
+    complemento:g('u-complemento'),bairro:g('u-bairro'),
+    cidade:g('u-cidade'),uf:g('u-uf')
+  });
+  if(res.ok){
+    const u=res.user;
+    closeModals();
+    toast('Usuário criado! Login: '+u.username,'success');
+    if(window.renderUsuarios)window.renderUsuarios();
+  } else toast(res.msg,'error');
 }
 
 function modalEditarUsuario(id) {
   const u=DB.getUsers().find(x=>x.id===id); if(!u) return;
+  const e=u.endereco||{};
   openModal(`
     <div class="modal-header"><div class="modal-title">Editar Usuário</div><button class="btn-close-modal" onclick="closeModals()">×</button></div>
     <div class="modal-body">
-      <div class="form-grid" style="gap:14px">
-        <div class="field-group"><label class="field-label">Nome</label><input id="eu-nome" class="input" value="${u.nome}"></div>
-        <div class="form-grid form-grid-2" style="gap:14px">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius);margin-bottom:14px;font-size:13px">
+        <span>Login:</span><code style="font-family:var(--mono);font-size:13px;color:var(--accent)">${u.username||'—'}</code>
+      </div>
+      <div class="form-grid" style="gap:12px">
+        <div class="form-grid form-grid-2" style="gap:12px">
+          <div class="field-group"><label class="field-label">Nome completo</label><input id="eu-nome" class="input" value="${u.nome}"></div>
+          <div class="field-group"><label class="field-label">E-mail</label><input id="eu-email" class="input" type="email" value="${u.email}"></div>
+        </div>
+        <div class="field-group"><label class="field-label">Telefone</label><input id="eu-telefone" class="input" value="${u.telefone||''}" placeholder="(00) 00000-0000" oninput="mascaraTelefone(this)"></div>
+        <div style="border-top:1px solid var(--border);padding-top:12px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Endereço</div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group">
+            <label class="field-label">CEP</label>
+            <div style="display:flex;gap:8px">
+              <input id="u-cep" class="input" value="${e.cep||''}" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" style="flex:1">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="buscarCEP()" style="flex-shrink:0">🔍</button>
+            </div>
+            <div id="cep-status" style="font-size:11px;margin-top:4px;min-height:14px"></div>
+          </div>
+          <div class="field-group"><label class="field-label">Número</label><input id="u-numero" class="input" value="${e.numero||''}" placeholder="123"></div>
+        </div>
+        <div class="field-group"><label class="field-label">Rua / Avenida / Travessa</label><input id="u-rua" class="input" value="${e.rua||''}" placeholder="Logradouro"></div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group"><label class="field-label">Bairro</label><input id="u-bairro" class="input" value="${e.bairro||''}" placeholder="Bairro"></div>
+          <div class="field-group"><label class="field-label">Complemento</label><input id="u-complemento" class="input" value="${e.complemento||''}" placeholder="Apto, Sala..."></div>
+        </div>
+        <div class="form-grid form-grid-2" style="gap:10px">
+          <div class="field-group"><label class="field-label">Cidade</label><input id="u-cidade" class="input" value="${e.cidade||''}" placeholder="Cidade"></div>
+          <div class="field-group"><label class="field-label">UF</label><input id="u-uf" class="input" value="${e.uf||''}" placeholder="SP" maxlength="2" style="text-transform:uppercase"></div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Acesso</div>
+        <div class="form-grid form-grid-2" style="gap:12px">
           <div class="field-group">
             <label class="field-label">Perfil</label>
             <select id="eu-perfil" class="input" onchange="toggleNivelEdit(this.value)">
@@ -2042,15 +2165,21 @@ function modalEditarUsuario(id) {
       <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarEdicaoUsuario('${id}')">Salvar</button>
     </div>
-  `);
+  `, '680px');
 }
 function toggleNivelEdit(p){const f=document.getElementById('nivel-edit');if(f)f.style.display=p==='analista'?'block':'none';}
 function salvarEdicaoUsuario(id) {
-  const nome=document.getElementById('eu-nome')?.value?.trim();
-  const perfil=document.getElementById('eu-perfil')?.value;
-  const nivel=document.getElementById('eu-nivel')?.value;
-  const senha=document.getElementById('eu-senha')?.value;
-  DB.updateUser(id,{nome,perfil,nivel:perfil==='analista'?parseInt(nivel):null});
+  const g = sel => document.getElementById(sel)?.value?.trim()||'';
+  const nome=g('eu-nome'),email=g('eu-email'),perfil=g('eu-perfil'),nivel=g('eu-nivel'),senha=g('eu-senha');
+  DB.updateUser(id,{
+    nome,email,perfil,nivel:perfil==='analista'?parseInt(nivel):null,
+    telefone:g('eu-telefone')||g('u-telefone'),
+    endereco:{
+      cep:g('u-cep'),rua:g('u-rua'),numero:g('u-numero'),
+      complemento:g('u-complemento'),bairro:g('u-bairro'),
+      cidade:g('u-cidade'),uf:g('u-uf')
+    }
+  });
   if(senha&&senha.length>=8) DB.changePassword(id,senha);
   closeModals(); toast('Usuário atualizado','success'); if(window.renderUsuarios)window.renderUsuarios();
 }
