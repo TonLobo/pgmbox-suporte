@@ -447,7 +447,7 @@ const DB = (() => {
   const gcfg = (k,d=null) => { const v=localStorage.getItem('pgmbox_cfg_'+k); return v!==null?JSON.parse(v):d };
   const scfg = (k,v) => localStorage.setItem('pgmbox_cfg_'+k, JSON.stringify(v));
 
-  const APP_VERSION = '11.0';
+  const APP_VERSION = '12.0';
 
   function resetStorage() {
     const keys = [];
@@ -1969,9 +1969,13 @@ Router.register('usuarios',()=>{
               <td><span class="badge ${u.ativo?'badge-green':'badge-gray'}">${u.ativo?'✓ Ativo':'✕ Inativo'}</span></td>
               <td style="font-size:12px;color:var(--text2)">${fmtDateShort(u.criadoEm)}</td>
               <td>
-                <div style="display:flex;gap:6px">
-                  <button class="btn btn-ghost btn-xs" onclick="modalEditarUsuario('${u.id}')">Editar</button>
-                  ${u.id!=='usr_admin'?`<button class="btn btn-ghost btn-xs" style="color:var(--${u.ativo?'red':'green'})" onclick="toggleAtivo('${u.id}',${!u.ativo})">${u.ativo?'Desativar':'Ativar'}</button>`:''}
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                  <button class="btn btn-ghost btn-xs" onclick="modalEditarUsuario('${u.id}')" title="Editar usuário" style="padding:4px 10px">✏️ Editar</button>
+                  ${u.id!=='usr_admin'?`
+                  <button class="btn btn-ghost btn-xs" onclick="toggleAtivo('${u.id}',${!u.ativo})" title="${u.ativo?'Desativar':'Ativar'} usuário"
+                    style="padding:4px 10px;color:var(--${u.ativo?'amber':'green'})">${u.ativo?'⏸ Desativar':'▶ Ativar'}</button>
+                  <button class="btn btn-ghost btn-xs" onclick="excluirUsuario('${u.id}')" data-nome="${u.nome}" title="Excluir usuário permanentemente"
+                    style="padding:4px 10px;color:var(--red)">🗑️ Excluir</button>`:''}
                 </div>
               </td>
             </tr>`).join('')}
@@ -2255,11 +2259,51 @@ function salvarEdicaoUsuario(id) {
     }
   });
   if(senha&&senha.length>=8) DB.changePassword(id,senha);
+  // Se o usuário editou a própria conta, atualiza a sessão com os novos dados
+  const sessao = DB.currentUser();
+  if(sessao?.id === id) {
+    const atualizado = DB.getUsers().find(u => u.id === id);
+    if(atualizado) sessionStorage.setItem('pgmbox_session', JSON.stringify(atualizado));
+    updateShell(atualizado);
+  }
   closeModals(); toast('Usuário atualizado','success'); if(window.renderUsuarios)window.renderUsuarios();
 }
 function toggleAtivo(id,ativo) {
   DB.updateUser(id,{ativo}); toast(ativo?'Usuário ativado':'Usuário desativado',ativo?'success':'warning');
   if(window.renderUsuarios)window.renderUsuarios();
+}
+
+function excluirUsuario(id) {
+  const btn = event.target.closest('button');
+  const nome = btn?.dataset.nome || 'este usuário';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <div class="modal-title">Excluir usuário</div>
+      </div>
+      <div class="modal-body" style="text-align:center;padding:28px">
+        <div style="font-size:40px;margin-bottom:12px">🗑️</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--text)">Excluir <strong>${nome}</strong>?</div>
+        <div style="font-size:13px;color:var(--text2)">Esta ação não pode ser desfeita. O usuário e todos os seus dados serão removidos permanentemente.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModals()">Cancelar</button>
+        <button class="btn btn-danger" onclick="confirmarExclusao('${id}')">Sim, excluir</button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+function confirmarExclusao(id) {
+  const users = DB.getUsers().filter(u => u.id !== id);
+  const key = 'pgmbox_users';
+  localStorage.setItem(key, JSON.stringify(users));
+  closeModals();
+  toast('Usuário excluído','success');
+  if(window.renderUsuarios) window.renderUsuarios();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2444,7 +2488,10 @@ function selecionarProvedor(p) {
 }
 
 async function testarEmail() {
-  const user = DB.currentUser();
+  // Sempre lê do DB para pegar e-mail atualizado (não da sessão que pode estar desatualizada)
+  const sessionUser = DB.currentUser();
+  const allUsers = DB.getUsers();
+  const user = allUsers.find(u => u.id === sessionUser?.id) || sessionUser;
   if(!user?.email){toast('Usuário sem e-mail cadastrado','error');return;}
   const btn = event.target;
   btn.disabled=true; btn.textContent='Enviando...';
