@@ -1065,7 +1065,8 @@ function enviarSenhaTemp() {
 
 // ─── Trocar senha temporária após login ───────────────────
 function verificarSenhaTemporaria(user) {
-  if (!user.senhaTemporaria) return;
+  // Suporta tanto snake_case (API) quanto camelCase (localStorage)
+  if (!user.senhaTemporaria && !user.senha_temporaria) return;
   // Abre modal obrigatório de troca de senha — não pode ser dispensado
   setTimeout(() => {
     const overlay = document.createElement('div');
@@ -1172,7 +1173,7 @@ function verificarConfirmacao(conf) {
   }
 }
 
-function salvarNovaSenha(userId, overlay) {
+async function salvarNovaSenha(userId, overlay) {
   const nova = document.getElementById('ns-nova')?.value;
   const confirma = document.getElementById('ns-confirma')?.value;
   const erroEl = document.getElementById('ns-erro');
@@ -1185,11 +1186,27 @@ function salvarNovaSenha(userId, overlay) {
   const btn = document.getElementById('ns-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
 
-  DB.changePassword(userId, nova);
-  DB.updateUser(userId, { senhaTemporaria: false });
-
-  const userAtualizado = DB.getUsers().find(u => u.id === userId);
-  if (userAtualizado) sessionStorage.setItem('pgmbox_session', JSON.stringify(userAtualizado));
+  if (_backendDisponivel) {
+    // Troca senha via API — senha_temporaria não precisa de senhaAtual
+    const r = await api('POST', '/api/auth/trocar-senha', { senhaAtual: '', novaSenha: nova });
+    if (!r.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Salvar nova senha'; }
+      erroEl.textContent = r.msg || 'Erro ao salvar. Tente novamente.';
+      return;
+    }
+    // Atualiza sessão local
+    const sessao = DB.currentUser();
+    if (sessao) {
+      sessao.senha_temporaria = false;
+      sessao.senhaTemporaria  = false;
+      sessionStorage.setItem('pgmbox_session', JSON.stringify(sessao));
+    }
+  } else {
+    DB.changePassword(userId, nova);
+    DB.updateUser(userId, { senhaTemporaria: false });
+    const userAtualizado = DB.getUsers().find(u => u.id === userId);
+    if (userAtualizado) sessionStorage.setItem('pgmbox_session', JSON.stringify(userAtualizado));
+  }
 
   overlay.remove();
   toast('Senha criada com sucesso! Bem-vindo ao PGMBox.', 'success');
