@@ -437,6 +437,58 @@ textarea.input{resize:vertical;min-height:80px}
 // ═══════════════════════════════════════════════════════════
 //  BANCO DE DADOS (localStorage + hash puro JS)
 // ═══════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+//  API CONFIG — Backend Railway
+// ════════════════════════════════════════════════════════════
+const API_URL = 'https://pgmbox-backend-production.up.railway.app';
+
+async function api(method, path, body = null) {
+  const headers = { 'Content-Type': 'application/json' };
+  const token = sessionStorage.getItem('pgmbox_api_token');
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  try {
+    const res = await fetch(API_URL + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) {
+      sessionStorage.removeItem('pgmbox_api_token');
+      sessionStorage.removeItem('pgmbox_session');
+      Router.go('login');
+      return { ok: false, msg: 'Sessão expirada. Faça login novamente.' };
+    }
+    return res.json();
+  } catch(e) {
+    console.error('[API]', method, path, e.message);
+    return { ok: false, msg: 'Erro de conexão com o servidor.' };
+  }
+}
+
+async function apiUpload(path, formData) {
+  const token = sessionStorage.getItem('pgmbox_api_token');
+  const headers = {};
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  try {
+    const res = await fetch(API_URL + path, { method: 'POST', headers, body: formData });
+    return res.json();
+  } catch(e) {
+    return { ok: false, msg: 'Erro no upload: ' + e.message };
+  }
+}
+
+// Indica se o backend está disponível
+let _backendDisponivel = false;
+async function verificarBackend() {
+  try {
+    const r = await fetch(API_URL + '/health', { signal: AbortSignal.timeout(4000) });
+    const d = await r.json();
+    _backendDisponivel = d.ok === true;
+  } catch { _backendDisponivel = false; }
+  return _backendDisponivel;
+}
+
 const DB = (() => {
   // Autenticação: senha em btoa (base64). Funciona em file://, http://, https://.
   const _enc = pw => btoa(unescape(encodeURIComponent(String(pw))));
@@ -447,7 +499,7 @@ const DB = (() => {
   const gcfg = (k,d=null) => { const v=localStorage.getItem('pgmbox_cfg_'+k); return v!==null?JSON.parse(v):d };
   const scfg = (k,v) => localStorage.setItem('pgmbox_cfg_'+k, JSON.stringify(v));
 
-  const APP_VERSION = '12.0';
+  const APP_VERSION = '13.0';
 
   function resetStorage() {
     const keys = [];
@@ -809,17 +861,31 @@ function doLogout() {
   if(btnE) btnE.addEventListener('click', mostrarEsqueciSenha);
 }
 
-function handleLoginClick() {
-  const email = (document.getElementById('login-email') || {}).value || '';
-  const senha = (document.getElementById('login-senha') || {}).value || '';
-  const erroEl = document.getElementById('login-erro');
-  const btn = document.getElementById('login-btn');
-  if (!email || !senha) {
-    if (erroEl) erroEl.textContent = 'Preencha e-mail e senha.';
+async function handleLoginClick() {
+  const loginVal = (document.getElementById('login-email') || {}).value || '';
+  const senha    = (document.getElementById('login-senha') || {}).value || '';
+  const erroEl   = document.getElementById('login-erro');
+  const btn      = document.getElementById('login-btn');
+  if (!loginVal || !senha) {
+    if (erroEl) erroEl.textContent = 'Preencha usuário e senha.';
     return;
   }
   if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
-  const res = DB.login(email.trim(), senha);
+
+  // Tenta login via API backend primeiro
+  const backendOk = await verificarBackend();
+  let res;
+  if (backendOk) {
+    res = await api('POST', '/api/auth/login', { login: loginVal.trim(), senha });
+    if (res.ok && res.token) {
+      sessionStorage.setItem('pgmbox_api_token', res.token);
+      sessionStorage.setItem('pgmbox_session', JSON.stringify(res.user));
+    }
+  } else {
+    // Fallback: localStorage (modo offline)
+    res = DB.login(loginVal.trim(), senha);
+  }
+
   if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
   if (res.ok) {
     document.getElementById('login-screen').style.display = 'none';
@@ -1168,11 +1234,13 @@ function marcarTodasLidas() {
 // ═══════════════════════════════════════════════════════════
 //  DASHBOARD
 // ═══════════════════════════════════════════════════════════
-Router.register('dashboard',()=>{
+Router.register('dashboard',async ()=>{
   document.getElementById('app-shell').style.display='flex';
   document.getElementById('login-screen').style.display='none';
   const user=DB.currentUser();
-  const todos=DB.getChamados();
+  const todos = _backendDisponivel
+    ? ((await api('GET','/api/chamados?limite=500'))?.chamados || DB.getChamados())
+    : DB.getChamados();
   const ativos=todos.filter(c=>!['encerrado','resolvido'].includes(c.status));
   const abertos=todos.filter(c=>c.status==='aberto').length;
   const emAtend=todos.filter(c=>c.status==='em_atendimento').length;
@@ -1449,25 +1517,34 @@ function renderNcFiles() {
   `).join('');
 }
 
-function submitNovoChamado(e) {
+async function submitNovoChamado(e) {
   e.preventDefault();
   const form=new FormData(e.target);
   const data={titulo:form.get('titulo'),cliente:form.get('cliente'),base:form.get('base'),modulo:form.get('modulo'),versao:form.get('versao'),descricao:form.get('descricao'),prioridade:form.get('prioridade'),analista_id:form.get('analista_id')};
-  const res=DB.createChamado(data);
+  let res;
+  if (_backendDisponivel) {
+    res = await api('POST', '/api/chamados', data);
+  } else {
+    res = DB.createChamado(data);
+  }
   if(res.ok) {
-    // Salvar anexos adicionados na abertura
-    if(window._ncAnexos?.length) {
-      window._ncAnexos.forEach(a => DB.adicionarAnexo(res.chamado.id, a));
-    }
-    // Salvar passos adicionados na abertura
+    const chamadoId = res.chamado?.id || res.id;
+    const chamadoNum = res.chamado?.numero || res.numero;
+    // Passos
     const passos = Array.from(document.querySelectorAll('.passo-input')).map(i=>i.value.trim()).filter(Boolean);
-    passos.forEach(p => DB.adicionarPasso(res.chamado.id, p));
-    DB.addNotificacao(data.analista_id,`Novo chamado ${res.chamado.numero} atribuído a você: ${data.titulo}`,res.chamado.id);
-    toast(`Chamado ${res.chamado.numero} aberto com sucesso!`,'success');
+    for(const p of passos) {
+      if(_backendDisponivel) await api('POST',`/api/chamados/${chamadoId}/passos`,{descricao:p});
+      else DB.adicionarPasso(chamadoId, p);
+    }
+    if(!_backendDisponivel) {
+      if(window._ncAnexos?.length) window._ncAnexos.forEach(a=>DB.adicionarAnexo(chamadoId,a));
+      if(data.analista_id) DB.addNotificacao(data.analista_id,`Novo chamado ${chamadoNum} atribuído a você: ${data.titulo}`,chamadoId);
+    }
+    toast(`Chamado ${chamadoNum} aberto com sucesso!`,'success');
     updateBadgeAbertos();
     window._ncAnexos=[];
-    Router.go('chamado',{id:res.chamado.id});
-  } else { toast('Erro ao abrir chamado','error'); }
+    Router.go('chamado',{id:chamadoId});
+  } else { toast(res.msg||'Erro ao abrir chamado','error'); }
 }
 
 // ═══════════════════════════════════════════════════════════
